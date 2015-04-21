@@ -21,7 +21,7 @@ add-type @"
 [System.Net.ServicePointManager]::CertificatePolicy = New-Object TrustAllCertsPolicy
     
     $baseuri = "https://$server"+':8445'+"/appsync/rest"
-    $loginuri = "https://"+$appsyncServer+":8444/cas-server/login?TARGET=https://"+$appsyncserver+":8445/appsync/" 
+    $loginuri = "https://"+$server+":8444/cas-server/login?TARGET=https://"+$server+":8445/appsync/" 
     $body = @{Username = $username; Password = $password}
 
     $request = Invoke-WebRequest -Uri $loginuri -SessionVariable session
@@ -35,7 +35,7 @@ add-type @"
     $Global:cookie = $session
     $Global:username = $username
     $Global:password = $password
-    $Global:server = $appsyncserver
+    $Global:server = $server
     $Global:baseuri = $baseuri
 }
 
