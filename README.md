@@ -4,7 +4,7 @@ AppSyncPS wraps AppSync REST API calls into PowerShell functions
 
 ## Installation
 
-Place all contents into your PowerShell Module folder, or use Import-Module
+Place all contents into your [PowerShell Module folder](https://msdn.microsoft.com/en-us/library/dd878350%28v=vs.85%29.aspx), or use [Import-Module](https://technet.microsoft.com/en-us/library/hh849725.aspx)
 
 ##Usage
 Once imported start the session:
