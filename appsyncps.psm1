@@ -53,6 +53,9 @@ add-type @"
     $Global:server = $server
     $Global:baseuri = $baseuri
 }
+#############################
+#Service Plan Commands
+#############################
 
 #Gets list of Service Plans
 function Get-ServicePlans(){
@@ -60,6 +63,103 @@ function Get-ServicePlans(){
  $baseuri = $Global:baseuri
  $uri = "$baseuri/types/servicePlan/instances"
  
+ $data = Invoke-RestMethod -Uri $uri -Method Get -WebSession $session
+
+ return $data.feed.entry
+
+}
+#Gets a Service Plan
+function Get-ServicePlan([string] $spid){
+ $session = $Global:cookie
+ $baseuri = $Global:baseuri
+ $uri = "$baseuri/instances/servicePlan::$spid"
+
+ $data = Invoke-RestMethod -Uri $uri -Method Get -WebSession $session
+
+ return $data.feed.entry
+
+}
+
+#Gets service plan datasets
+function Get-ServicePlanDataSets([string] $spid){
+ $session = $Global:cookie
+ $baseuri = $Global:baseuri
+ $uri = "$baseuri/instances/servicePlan::$spid/relationships/datasets"
+
+ $data = Invoke-RestMethod -Uri $uri -Method Get -WebSession $session
+
+ return $data.feed.entry
+
+}
+
+#Gets service plan apps
+function Get-ServicePlanApplications([string] $spid){
+ $session = $Global:cookie
+ $baseuri = $Global:baseuri
+ $uri = "$baseuri/instances/servicePlan::$spid/relationships/applications"
+
+ $data = Invoke-RestMethod -Uri $uri -Method Get -WebSession $session
+
+ return $data.feed.entry
+
+}
+
+#Gets service plan copies
+function Get-ServicePlanCopies([string] $spid){
+ $session = $Global:cookie
+ $baseuri = $Global:baseuri
+ $uri = "$baseuri/instances/servicePlan::$spid/relationships/copies"
+
+ $data = Invoke-RestMethod -Uri $uri -Method Get -WebSession $session
+
+ return $data.feed.entry
+
+}
+
+#Gets service plan log backups
+function Get-ServicePlanLogBackups([string] $spid){
+ $session = $Global:cookie
+ $baseuri = $Global:baseuri
+ $uri = "$baseuri/instances/servicePlan::$spid/relationships/logBackups"
+
+ $data = Invoke-RestMethod -Uri $uri -Method Get -WebSession $session
+
+ return $data.feed.entry
+
+}
+
+#Gets service plan users
+function Get-ServicePlanUsers([string] $spid){
+ $session = $Global:cookie
+ $baseuri = $Global:baseuri
+ $uri = "$baseuri/instances/servicePlan::$spid/relationships/users"
+
+ $data = Invoke-RestMethod -Uri $uri -Method Get -WebSession $session
+
+ return $data.feed.entry
+
+}
+
+
+
+#Gets service plan phases
+function Get-ServicePlanPhases([string] $spid){
+ $session = $Global:cookie
+ $baseuri = $Global:baseuri
+ $uri = "$baseuri/instances/servicePlan::$spid/relationships/phases"
+
+ $data = Invoke-RestMethod -Uri $uri -Method Get -WebSession $session
+
+ return $data.feed.entry
+
+}
+
+#Gets service plan phasepits
+function Get-ServicePlanPhasePits([string] $spid){
+ $session = $Global:cookie
+ $baseuri = $Global:baseuri
+ $uri = "$baseuri/instances/servicePlan::$spid/relationships/phasepits"
+
  $data = Invoke-RestMethod -Uri $uri -Method Get -WebSession $session
 
  return $data.feed.entry
@@ -103,6 +203,21 @@ function Run-ServicePlan {
   
   return $data.feed.entry
 }
+#############################
+#Phase Commands
+#############################
+function Get-PhaseCopies([string]$prid){
+ $session = $Global:cookie
+ $baseuri = $Global:baseuri
+ $uri = "$baseuri/instances/phase::$prid/relationships/copies"
+
+ $data = Invoke-RestMethod -Uri $uri -Method Get -WebSession $session
+
+ return $data.feed.entry
+
+
+}
+
 function New-AppSyncSecureCreds([string] $path)
 {
 
