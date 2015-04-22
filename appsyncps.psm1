@@ -70,10 +70,10 @@ function Get-ServicePlans(){
 function Run-ServicePlan {
   Param (
     [parameter(ValueFromPipelineByPropertyName)]
-    [string[]]$id,
+    [string]$id,
 
     [parameter()]
-    [string[]]$spid
+    [string]$spid
 
   )
 
