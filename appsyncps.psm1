@@ -218,6 +218,69 @@ function Get-PhaseCopies([string]$prid){
 
 }
 
+function Get-PhasePits(){
+ $session = $Global:cookie
+ $baseuri = $Global:baseuri
+ $uri = "$baseuri/types/phasepit/instances"
+
+ $data = Invoke-RestMethod -Uri $uri -Method Get -WebSession $session
+
+ return $data.feed.entry
+
+
+}
+
+#######Application Commands
+##########################
+
+function Get-AppSyncDatabases(){
+ $session = $Global:cookie
+ $baseuri = $Global:baseuri
+ $uri = "$baseuri/types/sqlServerDatabase/instances"
+
+ $data = Invoke-RestMethod -Uri $uri -Method Get -WebSession $session
+
+ return $data.feed.entry
+
+
+}
+
+function Get-AppSyncDatabaseCopies([string]$dbid){
+ $session = $Global:cookie
+ $baseuri = $Global:baseuri
+ $uri = "$baseuri/instances/sqlServerDatabase::$dbid/relationships/copies"
+
+ $data = Invoke-RestMethod -Uri $uri -Method Get -WebSession $session
+
+ return $data.feed.entry
+
+
+}
+function Get-RepurposePlans(){
+   $session = $Global:cookie
+ $baseuri = $Global:baseuri
+ $uri = "$baseuri/types/servicePlan/instances/?application=sql&planType=Repurposing"
+
+ $data = Invoke-RestMethod -Uri $uri -Method Get -WebSession $session
+
+ return $data.feed.entry
+
+}
+function Refresh-RepurposeCopy([string]$pitid){
+ $session = $Global:cookie
+ $baseuri = $Global:baseuri
+ $uri = "$baseuri/instances/phasepit::$pitid/action/refresh/?refreshAllGens=true"
+
+ $data = Invoke-RestMethod -Uri $uri -Method Post -WebSession $session
+
+ return $data.feed.entry
+
+}
+
+
+
+
+
 function New-AppSyncSecureCreds([string] $path)
 {
 
