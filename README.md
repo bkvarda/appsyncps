@@ -11,13 +11,21 @@ Once imported start the session:
 ```
 New-AppSyncSession -user <appsync username> -password <password> -server <appsync server name or IP, no ports>
 ```
+If you want to script this completely with secure credentials, do this first (one time per user, per host):
+```
+New-AppSyncSecureCreds -path <path where you want to store encrypted creds, IE C:\temp>
+```
+Then you can do this in your script:
+```
+New-AppSyncSession -server <appsync server name or IP, no ports> -credspath <place you stored creds, IE C:\temp>
+```
 You can get all service plans like this:
 ```
 Get-ServicePlans
 ```
 You can run service plans like this:
 ```
-Run-ServicePlan -id <full service plan id uri>
+Run-ServicePlan -spid <service plan unique identifier IE 89c8ee2a-835d-4c68-bd4f-e36f60440d9a>
 ```
 Piping service plan IDs also works:
 ```
