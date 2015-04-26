@@ -1,0 +1,409 @@
+<servicePlan>
+  <application>sql</application>
+  <builtin>true</builtin>
+  <complexity>1</complexity>
+  <description tag="SPDescription">Creates Microsoft SQL Server Full local 1st generation repurpose copies</description>
+  <displayName tag="SPDisplayName">POC 2015 04 25 10 10 26 AM 1.1</displayName>
+  <enabled>true</enabled>
+  <name tag="SPName">POC 2015 04 25 10 10 26 AM 1.1</name>
+  <planType>Repurposing</planType>
+  <repurposeGeneration>1</repurposeGeneration>
+  <userLabel>1st</userLabel>
+  <version>2</version>
+  <phase>
+    <enabled>false</enabled>
+    <ordinal>3</ordinal>
+    <type>script</type>
+    <name>Pre-Copy-Script</name>
+    <description>Executes a remote user script to prepare application for copy creation</description>
+    <displayName>Pre-copy script</displayName>
+    <options>
+      <option>
+        <name>host</name>
+        <value/>
+      </option>
+      <option>
+        <name>isRequired</name>
+        <value>false</value>
+      </option>
+      <option>
+        <name>file</name>
+        <value/>
+      </option>
+      <option>
+        <name>path</name>
+        <value>%ProgramData%\EMC\AppSync\scripts</value>
+      </option>
+      <option>
+        <name>parameters</name>
+        <value/>
+      </option>
+    </options>
+    <schedule>
+      <enabled>false</enabled>
+      <startCriteria>
+        <startPhase>Application-Mapping</startPhase>
+        <startType>phase</startType>
+      </startCriteria>
+    </schedule>
+    <hasCredentialsChanged>false</hasCredentialsChanged>
+    <onDemand>false</onDemand>
+    <phaseProgressLabel>Running Pre-Copy Script</phaseProgressLabel>
+    <ordinalName>3 Pre-copy script</ordinalName>
+  </phase>
+  <phase>
+    <enabled>false</enabled>
+    <ordinal>10</ordinal>
+    <type>unmount</type>
+    <name>Unmount-Copy</name>
+    <description>Unmounts a copy from the mount host</description>
+    <displayName>Unmount copy</displayName>
+    <options>
+      <option>
+        <name>unmountType</name>
+        <value>unmount_this_cycle</value>
+      </option>
+      <option>
+        <name>isRequired</name>
+        <value>true</value>
+      </option>
+    </options>
+    <schedule>
+      <enabled>false</enabled>
+      <startCriteria>
+        <startPhase>Post-Mount-Script</startPhase>
+        <startType>phase</startType>
+      </startCriteria>
+    </schedule>
+    <hasCredentialsChanged>false</hasCredentialsChanged>
+    <onDemand>false</onDemand>
+    <phaseProgressLabel>Unmounting the Copy</phaseProgressLabel>
+    <ordinalName>10 Unmount copy</ordinalName>
+  </phase>
+  <phase>
+    <enabled>true</enabled>
+    <ordinal>1</ordinal>
+    <type>discovery</type>
+    <name>Application-Discovery</name>
+    <description>Discover the current condition of the application</description>
+    <displayName>Application discovery</displayName>
+    <options>
+      <option>
+        <name>isRequired</name>
+        <value>true</value>
+      </option>
+    </options>
+    <schedule>
+      <enabled>false</enabled>
+      <startCriteria>
+        <startType>time</startType>
+      </startCriteria>
+      <scheduleExpression>
+        <dayOfMonth>1</dayOfMonth>
+        <dayOfWeek>*</dayOfWeek>
+        <hour>0</hour>
+        <minute>0</minute>
+        <month>*</month>
+        <second>0</second>
+        <year>*</year>
+      </scheduleExpression>
+      <options>
+        <option>
+          <name>rpoValue</name>
+          <value>0</value>
+        </option>
+      </options>
+    </schedule>
+    <hasCredentialsChanged>false</hasCredentialsChanged>
+    <onDemand>false</onDemand>
+    <phaseProgressLabel>Discovering Application Storage</phaseProgressLabel>
+    <ordinalName>1 Application discovery</ordinalName>
+  </phase>
+  <phase>
+    <enabled>true</enabled>
+    <ordinal>4</ordinal>
+    <type>replication</type>
+    <name>Create-Copy</name>
+    <description>Create a 1st generation application consistent copy of the application for repurposing</description>
+    <displayName>Create 1st gen copy</displayName>
+    <options>
+      <option>
+        <name>switchToCopyForSecondary</name>
+        <value>false</value>
+      </option>
+      <option>
+        <name>restrictLoad</name>
+        <value>yes</value>
+      </option>
+      <option>
+        <name>expireKeepCopyCountStorage</name>
+        <value>&lt;keepCopyCountOption&gt;&lt;keepCopyCountList&gt;&lt;keepCopyCount&gt;1&lt;/keepCopyCount&gt;&lt;stoageTechnology&gt;VNXSnap&lt;/stoageTechnology&gt;&lt;/keepCopyCountList&gt;&lt;keepCopyCountList&gt;&lt;keepCopyCount&gt;1&lt;/keepCopyCount&gt;&lt;stoageTechnology&gt;VNXFileSnap&lt;/stoageTechnology&gt;&lt;/keepCopyCountList&gt;&lt;keepCopyCountList&gt;&lt;keepCopyCount&gt;1&lt;/keepCopyCount&gt;&lt;stoageTechnology&gt;VMAXClone&lt;/stoageTechnology&gt;&lt;/keepCopyCountList&gt;&lt;keepCopyCountList&gt;&lt;keepCopyCount&gt;1&lt;/keepCopyCount&gt;&lt;stoageTechnology&gt;VNXeFileSnap&lt;/stoageTechnology&gt;&lt;/keepCopyCountList&gt;&lt;keepCopyCountList&gt;&lt;keepCopyCount&gt;1&lt;/keepCopyCount&gt;&lt;stoageTechnology&gt;VMAXSnap&lt;/stoageTechnology&gt;&lt;/keepCopyCountList&gt;&lt;keepCopyCountList&gt;&lt;keepCopyCount&gt;1&lt;/keepCopyCount&gt;&lt;stoageTechnology&gt;VNXeSnap&lt;/stoageTechnology&gt;&lt;/keepCopyCountList&gt;&lt;keepCopyCountList&gt;&lt;keepCopyCount&gt;1&lt;/keepCopyCount&gt;&lt;stoageTechnology&gt;XIOSnap&lt;/stoageTechnology&gt;&lt;/keepCopyCountList&gt;&lt;/keepCopyCountOption&gt;</value>
+      </option>
+      <option>
+        <name>isRequired</name>
+        <value>true</value>
+      </option>
+      <option>
+        <name>copyLocality</name>
+        <value>local</value>
+      </option>
+      <option>
+        <name>expireKeepCopyCount</name>
+        <value>1</value>
+      </option>
+      <option>
+        <name>localCopyPreference</name>
+        <value>CopyPreferenceSnapshot,</value>
+      </option>
+      <option>
+        <name>backupType</name>
+        <value>Full</value>
+      </option>
+    </options>
+    <schedule>
+      <enabled>false</enabled>
+      <startCriteria>
+        <startPhase>Pre-Copy-Script</startPhase>
+        <startType>phase</startType>
+      </startCriteria>
+    </schedule>
+    <hasCredentialsChanged>false</hasCredentialsChanged>
+    <onDemand>false</onDemand>
+    <phaseProgressLabel>Creating 1st Generation Repurpose Copy of Application</phaseProgressLabel>
+    <ordinalName>4 Create 1st gen copy</ordinalName>
+  </phase>
+  <phase>
+    <enabled>true</enabled>
+    <ordinal>2</ordinal>
+    <type>mapping</type>
+    <name>Application-Mapping</name>
+    <description>Map the application and storage</description>
+    <displayName>Application mapping</displayName>
+    <options>
+      <option>
+        <name>isRequired</name>
+        <value>true</value>
+      </option>
+    </options>
+    <schedule>
+      <enabled>false</enabled>
+      <startCriteria>
+        <startPhase>Application-Discovery</startPhase>
+        <startType>phase</startType>
+      </startCriteria>
+    </schedule>
+    <hasCredentialsChanged>false</hasCredentialsChanged>
+    <onDemand>false</onDemand>
+    <phaseProgressLabel>Mapping Application Storage</phaseProgressLabel>
+    <ordinalName>2 Application mapping</ordinalName>
+  </phase>
+  <phase>
+    <enabled>false</enabled>
+    <ordinal>5</ordinal>
+    <type>script</type>
+    <name>Post-Copy-Script</name>
+    <description>Executes an optional remote user script after creating a copy of the application</description>
+    <displayName>Post-copy script</displayName>
+    <options>
+      <option>
+        <name>host</name>
+        <value/>
+      </option>
+      <option>
+        <name>isRequired</name>
+        <value>false</value>
+      </option>
+      <option>
+        <name>file</name>
+        <value/>
+      </option>
+      <option>
+        <name>path</name>
+        <value>%ProgramData%\EMC\AppSync\scripts</value>
+      </option>
+      <option>
+        <name>parameters</name>
+        <value/>
+      </option>
+    </options>
+    <schedule>
+      <enabled>false</enabled>
+      <startCriteria>
+        <startPhase>Create-Copy</startPhase>
+        <startType>phase</startType>
+      </startCriteria>
+    </schedule>
+    <hasCredentialsChanged>false</hasCredentialsChanged>
+    <onDemand>false</onDemand>
+    <phaseProgressLabel>Running Post-Copy Script</phaseProgressLabel>
+    <ordinalName>5 Post-copy script</ordinalName>
+  </phase>
+  <phase>
+    <enabled>false</enabled>
+    <ordinal>7</ordinal>
+    <type>mount</type>
+    <name>Mount-Copy</name>
+    <description>Mounts a copy to a mount host</description>
+    <displayName>Mount copy</displayName>
+    <options>
+      <option>
+        <name>site</name>
+        <value>local</value>
+      </option>
+      <option>
+        <name>defaultMountPath</name>
+        <value>%SystemDrive%\AppSyncMounts\%%ProdServerName%%\</value>
+      </option>
+      <option>
+        <name>accessmode</name>
+        <value>physical</value>
+      </option>
+      <option>
+        <name>mountSnapshot</name>
+        <value>false</value>
+      </option>
+      <option>
+        <name>mountpath</name>
+        <value>Default Path</value>
+      </option>
+      <option>
+        <name>isRequired</name>
+        <value>true</value>
+      </option>
+      <option>
+        <name>copyMetadataPath</name>
+        <value>Default Path</value>
+      </option>
+      <option>
+        <name>defaultCopyMetadataPath</name>
+        <value>%SystemDrive%\AppSyncMounts\%%ProdServerName%%\</value>
+      </option>
+      <option>
+        <name>mounthost</name>
+        <value>Original Host</value>
+      </option>
+      <option>
+        <name>accesstype</name>
+        <value>Read-only</value>
+      </option>
+      <option>
+        <name>useDedicatedStorageGroup</name>
+        <value>true</value>
+      </option>
+    </options>
+    <schedule>
+      <enabled>false</enabled>
+      <startCriteria>
+        <startPhase>Unmount-Previous-Copy</startPhase>
+        <startType>phase</startType>
+      </startCriteria>
+    </schedule>
+    <hasCredentialsChanged>false</hasCredentialsChanged>
+    <onDemand>false</onDemand>
+    <phaseProgressLabel>Performing Mount Operation</phaseProgressLabel>
+    <ordinalName>7 Mount copy</ordinalName>
+  </phase>
+  <phase>
+    <enabled>false</enabled>
+    <ordinal>9</ordinal>
+    <type>script</type>
+    <name>Post-Mount-Script</name>
+    <description>Executes an optional remote user script after performing a consistency check of the application</description>
+    <displayName>Post-mount script</displayName>
+    <options>
+      <option>
+        <name>host</name>
+        <value/>
+      </option>
+      <option>
+        <name>isRequired</name>
+        <value>false</value>
+      </option>
+      <option>
+        <name>file</name>
+        <value/>
+      </option>
+      <option>
+        <name>path</name>
+        <value>%ProgramData%\EMC\AppSync\scripts</value>
+      </option>
+      <option>
+        <name>parameters</name>
+        <value/>
+      </option>
+    </options>
+    <schedule>
+      <enabled>false</enabled>
+      <startCriteria>
+        <startPhase>Recover-Copy</startPhase>
+        <startType>phase</startType>
+      </startCriteria>
+    </schedule>
+    <hasCredentialsChanged>false</hasCredentialsChanged>
+    <onDemand>false</onDemand>
+    <phaseProgressLabel>Running Post-Mount Script</phaseProgressLabel>
+    <ordinalName>9 Post-mount script</ordinalName>
+  </phase>
+  <phase>
+    <enabled>false</enabled>
+    <ordinal>8</ordinal>
+    <type>recover</type>
+    <name>Recover-Copy</name>
+    <description>Recovers the mounted application on the host</description>
+    <displayName>Recover copy</displayName>
+    <options>
+      <option>
+        <name>recoveryInstance</name>
+        <value/>
+      </option>
+      <option>
+        <name>recoveryType</name>
+        <value>recovery</value>
+      </option>
+      <option>
+        <name>isRequired</name>
+        <value>false</value>
+      </option>
+    </options>
+    <schedule>
+      <enabled>false</enabled>
+      <startCriteria>
+        <startPhase>Mount-Copy</startPhase>
+        <startType>phase</startType>
+      </startCriteria>
+    </schedule>
+    <hasCredentialsChanged>false</hasCredentialsChanged>
+    <onDemand>false</onDemand>
+    <phaseProgressLabel>Running Database Recovery on Mounted Application</phaseProgressLabel>
+    <ordinalName>8 Recover copy</ordinalName>
+  </phase>
+  <phase>
+    <enabled>false</enabled>
+    <ordinal>6</ordinal>
+    <type>unmount</type>
+    <name>Unmount-Previous-Copy</name>
+    <description>Unmounts an existing copy from the mount host</description>
+    <displayName>Unmount previous copy</displayName>
+    <options>
+      <option>
+        <name>unmountType</name>
+        <value>unmount_previous_cycle</value>
+      </option>
+      <option>
+        <name>isRequired</name>
+        <value>true</value>
+      </option>
+    </options>
+    <schedule>
+      <enabled>false</enabled>
+      <startCriteria>
+        <startPhase>Post-Copy-Script</startPhase>
+        <startType>phase</startType>
+      </startCriteria>
+    </schedule>
+    <hasCredentialsChanged>false</hasCredentialsChanged>
+    <onDemand>false</onDemand>
+    <phaseProgressLabel>Unmounting the Previous Copy</phaseProgressLabel>
+    <ordinalName>6 Unmount previous copy</ordinalName>
+  </phase>
+</servicePlan>

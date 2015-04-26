@@ -4,6 +4,8 @@
 $Global:cookie = $null
 $Global:server =$null
 $Global:baseuri=$null
+$Global:secpassword=$null
+$Global:username=$null
 ######################
 
 #Starts a new session (logs into cas server and stores cookie as $session)
@@ -36,7 +38,7 @@ add-type @"
     
     $baseuri = "https://$server"+':8445'+"/appsync/rest"
     $loginuri = "https://"+$server+":8444/cas-server/login?TARGET=https://"+$server+":8445/appsync/" 
-    $body = @{Username = $username; Password = $password}
+    
 
     #go to login url, grab cookie
     $request = Invoke-WebRequest -Uri $loginuri -SessionVariable session
@@ -52,6 +54,8 @@ add-type @"
     $Global:cookie = $session
     $Global:server = $server
     $Global:baseuri = $baseuri
+    $Global:secpassword = $secpassword
+    $Global:username = $username
 }
 #############################
 #Service Plan Commands
@@ -69,96 +73,21 @@ function Get-ServicePlans(){
 
 }
 #Gets a Service Plan
-function Get-ServicePlan([string] $spid){
+function Get-ServicePlan{
+
+Param (
+    [parameter(ValueFromPipelineByPropertyName)]
+    [string]$id,
+
+    [parameter()]
+    [string]$spid
+
+  )
+ 
+ if($id){$spid = $id}
  $session = $Global:cookie
  $baseuri = $Global:baseuri
  $uri = "$baseuri/instances/servicePlan::$spid"
-
- $data = Invoke-RestMethod -Uri $uri -Method Get -WebSession $session
-
- return $data.feed.entry
-
-}
-
-#Gets service plan datasets
-function Get-ServicePlanDataSets([string] $spid){
- $session = $Global:cookie
- $baseuri = $Global:baseuri
- $uri = "$baseuri/instances/servicePlan::$spid/relationships/datasets"
-
- $data = Invoke-RestMethod -Uri $uri -Method Get -WebSession $session
-
- return $data.feed.entry
-
-}
-
-#Gets service plan apps
-function Get-ServicePlanApplications([string] $spid){
- $session = $Global:cookie
- $baseuri = $Global:baseuri
- $uri = "$baseuri/instances/servicePlan::$spid/relationships/applications"
-
- $data = Invoke-RestMethod -Uri $uri -Method Get -WebSession $session
-
- return $data.feed.entry
-
-}
-
-#Gets service plan copies
-function Get-ServicePlanCopies([string] $spid){
- $session = $Global:cookie
- $baseuri = $Global:baseuri
- $uri = "$baseuri/instances/servicePlan::$spid/relationships/copies"
-
- $data = Invoke-RestMethod -Uri $uri -Method Get -WebSession $session
-
- return $data.feed.entry
-
-}
-
-#Gets service plan log backups
-function Get-ServicePlanLogBackups([string] $spid){
- $session = $Global:cookie
- $baseuri = $Global:baseuri
- $uri = "$baseuri/instances/servicePlan::$spid/relationships/logBackups"
-
- $data = Invoke-RestMethod -Uri $uri -Method Get -WebSession $session
-
- return $data.feed.entry
-
-}
-
-#Gets service plan users
-function Get-ServicePlanUsers([string] $spid){
- $session = $Global:cookie
- $baseuri = $Global:baseuri
- $uri = "$baseuri/instances/servicePlan::$spid/relationships/users"
-
- $data = Invoke-RestMethod -Uri $uri -Method Get -WebSession $session
-
- return $data.feed.entry
-
-}
-
-
-
-#Gets service plan phases
-function Get-ServicePlanPhases([string] $spid){
- $session = $Global:cookie
- $baseuri = $Global:baseuri
- $uri = "$baseuri/instances/servicePlan::$spid/relationships/phases"
-
- $data = Invoke-RestMethod -Uri $uri -Method Get -WebSession $session
-
- return $data.feed.entry
-
-}
-
-#Gets service plan phasepits
-function Get-ServicePlanPhasePits([string] $spid){
- $session = $Global:cookie
- $baseuri = $Global:baseuri
- $uri = "$baseuri/instances/servicePlan::$spid/relationships/phasepits"
 
  $data = Invoke-RestMethod -Uri $uri -Method Get -WebSession $session
 
@@ -203,83 +132,193 @@ function Run-ServicePlan {
   
   return $data.feed.entry
 }
-#############################
-#Phase Commands
-#############################
-function Get-PhaseCopies([string]$prid){
- $session = $Global:cookie
- $baseuri = $Global:baseuri
- $uri = "$baseuri/instances/phase::$prid/relationships/copies"
 
- $data = Invoke-RestMethod -Uri $uri -Method Get -WebSession $session
+#########################
+#Run Repurpose Workflows#
+#########################
 
- return $data.feed.entry
+
+# id = unique identifier of DB
+function New-AppSyncGen1DBCopy($dbid){
+  $session = $Global:cookie
+  $baseuri = $Global:baseuri
+
+  $db = (Invoke-RestMethod -Uri "$baseuri/instances/sqlServerDatabase::$dbid" -Method Get -WebSession $session).feed.entry.content.sqlServerDatabase
+  
+  $dbinstance = (Invoke-RestMethod -Uri "$baseuri/instances/sqlServerDatabase::$dbid/relationships/sqlServerInstance" -Method Get -WebSession $session).feed.entry.content.sqlServerInstance
+  
+  $instanceid = $dbinstance.id
+ 
+  $dbhost = (Invoke-RestMethod -Uri "$baseuri/instances/sqlServerInstance::$instanceid/relationships/host" -Method Get -WebSession $session).feed.entry.content.host
+  
+  
+  #change content of template to new name of Gen1
+  $time = Get-Date -UFormat "%Y %M %D %H %S %p"
+  $g1xml = [xml](Get-Content "$PSScriptRoot\g1.xml")
+  $g1xml.servicePlan.name.'#text' = $db.name+" $time "+"1.1" 
+  $g1xml.servicePlan.displayName.'#text' = $db.name+" $time "+"1.1"
+
+
+  
+  #generate XML payloud for new service plan
+  $body = ($g1xml.OuterXml)
+  
+  $uri = "$baseuri/types/servicePlan/instances"
+  
+  #create the new 'service plan' for the g1
+  $data = (Invoke-RestMethod -Uri $uri -Method Post -Body $body -ContentType "application/xml" -WebSession $session)
+
+  
+
+  #new service plan data
+  $sp = $data.feed.entry
+  $spid = $sp.content.servicePlan.id
+
+  #change content of dataset template
+  $dsxml = [xml](Get-Content "$PSScriptRoot\dataset.xml") 
+  $dsxml.dataset.options.option[0].value = ($dbhost.name).toString()
+  $dsxml.dataset.options.option[1].value = ($dbinstance.name).toString()
+  $dsxml.dataset.options.option[2].value = ($db.name).toString()
+
+  #generate XML payload for new dataset tied to new service plan
+  $body = ($dsxml.OuterXml)
+
+
+  $dsuri = "$baseuri/types/dataset/instances?servicePlan=$spid"
+
+  #create the new dataset tied to new service plan
+  $ds = (Invoke-RestMethod -Uri $dsuri -Method Post -Body $body -ContentType "application/xml" -WebSession $session)
+  
+
+
+  #run the service plan 
+  $process = ($sp |Run-ServicePlan)
+  
+  Write-Host "Serviceplan running..."
+  $limit = New-TimeSpan -Minutes 1
+  $timer = [diagnostics.stopwatch]::StartNew()
+
+  while($timer.Elapsed -lt $limit){
+  $status=($process | Get-PhaseStatus)
+  if($status.overallState -eq "Complete"){
+      Write-Host -ForeGroundColor Green "Process complete with status:"$status.overallStatus
+      return $sp
+  }
+  Start-Sleep -Seconds 5
+
+ }
+
+ 
+}
+
+function New-AppSyncGen2DBCopy([string]$dbid, [string]$spid){
+  $session = $Global:cookie
+  $baseuri = $Global:baseuri
+
+  $db = (Invoke-RestMethod -Uri "$baseuri/instances/sqlServerDatabase::$dbid" -Method Get -WebSession $session).feed.entry.content.sqlServerDatabase
+  
+  $dbinstance = (Invoke-RestMethod -Uri "$baseuri/instances/sqlServerDatabase::$dbid/relationships/sqlServerInstance" -Method Get -WebSession $session).feed.entry.content.sqlServerInstance
+  
+  $instanceid = $dbinstance.id
+ 
+  $dbhost = (Invoke-RestMethod -Uri "$baseuri/instances/sqlServerInstance::$instanceid/relationships/host" -Method Get -WebSession $session).feed.entry.content.host
+
+  $next2g = (Invoke-RestMethod -Uri "$baseuri/instances/servicePlan::$spid/action/next2ndGenName" -Method Post -WebSession $session).feed.entry.content.servicePlan
+ 
+  
+  #change content of template to new name of Gen2
+  $time = Get-Date -UFormat "%Y %M %D %H %S %p"
+  $g2xml = [xml](Get-Content "$PSScriptRoot\g2.xml")
+  $g2xml.servicePlan.name.'#text' = ($next2g.name.'#text').toString()
+  $g2xml.servicePlan.displayName.'#text' = ($next2g.displayName.'#text').toString()
+  
+  #generate XML payloud for new service plan
+  $body = ($g2xml.OuterXml)
+  
+  $uri = "$baseuri/types/servicePlan/instances"
+  
+  #create the new 'service plan' for the g2
+  $data = (Invoke-RestMethod -Uri $uri -Method Post -Body $body -ContentType "application/xml" -WebSession $session)
+
+  #new service plan data
+  $sp = $data.feed.entry
+  $spid = $sp.content.servicePlan.id
+
+  #change content of dataset template
+  $dsxml = [xml](Get-Content "$PSScriptRoot\dataset.xml") 
+  $dsxml.dataset.options.option[0].value = ($dbhost.name).toString()
+  $dsxml.dataset.options.option[1].value = ($dbinstance.name).toString()
+  $dsxml.dataset.options.option[2].value = ($db.name).toString()
+
+  #generate XML payload for new dataset tied to new service plan
+  $body = ($dsxml.OuterXml)
+
+
+  $uri = "$baseuri/types/dataset/instances?servicePlan=$spid"
+
+  #create the new dataset tied to new service plan
+  $ds = (Invoke-RestMethod -Uri $uri -Method Post -Body $body -ContentType "application/xml" -WebSession $session)
+
+
+  #run the service plan 
+  $process = ($sp |Run-ServicePlan)
+  
+  Write-Host "Serviceplan running..."
+  $limit = New-TimeSpan -Minutes 1
+  $timer = [diagnostics.stopwatch]::StartNew()
+
+ 
+
+  while($timer.Elapsed -lt $limit){
+  $status=($process | Get-PhaseStatus)
+  if($status.overallState -eq "Complete"){
+      Write-Host -ForeGroundColor Green "Process complete with status:"$status.overallStatus
+      Re-Auth
+      return $sp
+  }
+  Start-Sleep -Seconds 5
+
+ }
+
 
 
 }
 
-function Get-PhasePits(){
- $session = $Global:cookie
- $baseuri = $Global:baseuri
- $uri = "$baseuri/types/phasepit/instances"
+function Mount-AppsyncCopy{
 
- $data = Invoke-RestMethod -Uri $uri -Method Get -WebSession $session
-
- return $data.feed.entry
 
 
 }
 
-#######Application Commands
-##########################
+###########################
+###Error Handling/Status###
+###########################
 
-function Get-AppSyncDatabases(){
- $session = $Global:cookie
- $baseuri = $Global:baseuri
- $uri = "$baseuri/types/sqlServerDatabase/instances"
+function Get-PhaseStatus{
+Param (
+    [parameter(ValueFromPipelineByPropertyName)]
+    [string]$id
+)
 
- $data = Invoke-RestMethod -Uri $uri -Method Get -WebSession $session
+$baseuri = $Global:baseuri
+$session = $Global:cookie
+$uri = "$id/relationships/phaseStatus"
 
- return $data.feed.entry
+$data = (Invoke-RestMethod -Uri $uri -Method Get -WebSession $session).feed.entry.content.phaseStatus
+$status = ($data.overallStatus)
+$state = ($data.overallState)
+Write-Host -ForegroundColor Yellow "Current state is : $state"
+Write-Host -ForegroundColor Yellow "Current status is : $status"
 
-
-}
-
-function Get-AppSyncDatabaseCopies([string]$dbid){
- $session = $Global:cookie
- $baseuri = $Global:baseuri
- $uri = "$baseuri/instances/sqlServerDatabase::$dbid/relationships/copies"
-
- $data = Invoke-RestMethod -Uri $uri -Method Get -WebSession $session
-
- return $data.feed.entry
-
-
-}
-function Get-RepurposePlans(){
-   $session = $Global:cookie
- $baseuri = $Global:baseuri
- $uri = "$baseuri/types/servicePlan/instances/?application=sql&planType=Repurposing"
-
- $data = Invoke-RestMethod -Uri $uri -Method Get -WebSession $session
-
- return $data.feed.entry
-
-}
-function Refresh-RepurposeCopy([string]$pitid){
- $session = $Global:cookie
- $baseuri = $Global:baseuri
- $uri = "$baseuri/instances/phasepit::$pitid/action/refresh/?refreshAllGens=true"
-
- $data = Invoke-RestMethod -Uri $uri -Method Post -WebSession $session
-
- return $data.feed.entry
+$data
 
 }
 
 
 
-
+######################
+#Helpers##############
+######################
 
 function New-AppSyncSecureCreds([string] $path)
 {
@@ -301,6 +340,31 @@ function New-AppSyncSecureCreds([string] $path)
   $creds.Password | ConvertFrom-SecureString | Set-Content $pwdpath 
 
   Write-Host -ForegroundColor Green "Secure credentials set in directory $path"
+
+}
+function Re-Auth(){
+    $server = $Global:server
+    $secpassword = $Global:secpassword
+    $username = $Global:username
+
+    $BSTR = [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($secpassword)
+    $password = [System.Runtime.InteropServices.Marshal]::PtrToStringAuto($BSTR)
+    
+    $loginuri = "https://"+$server+":8444/cas-server/login?TARGET=https://"+$server+":8445/appsync/" 
+    
+
+    #go to login url, grab cookie
+    $request = Invoke-WebRequest -Uri $loginuri -SessionVariable session
+
+    $form = $request.Forms[0]
+    $form.Fields["username"] = $username
+    $form.Fields["password"] = $password
+
+    #login to login url
+    $auth = Invoke-RestMethod -Uri $loginuri -WebSession $session -Method Post -Body $form.Fields
+
+    #store server info and session info for further calls
+    $Global:cookie = $session
 
 }
 

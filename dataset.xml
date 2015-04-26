@@ -1,0 +1,17 @@
+<dataset>
+  <type>sql</type>
+  <options>
+    <option>
+      <name>host</name>
+      <value>lrma148</value>
+    </option>
+    <option>
+      <name>instance</name>
+      <value>LRMA148</value>
+    </option>
+    <option>
+      <name>database</name>
+      <value>POC</value>
+    </option>
+  </options>
+</dataset>
