@@ -202,6 +202,7 @@ function New-AppSyncGen1DBCopy($dbid){
   $status=($process | Get-PhaseStatus)
   if($status.overallState -eq "Complete"){
       Write-Host -ForeGroundColor Green "Process complete with status:"$status.overallStatus
+      Re-Auth
       return $sp
   }
   Start-Sleep -Seconds 5
