@@ -292,6 +292,45 @@ function Mount-AppsyncCopy{
 }
 
 ###########################
+##SQL Related Commands#####
+###########################
+function Get-AppSyncSQLDatabases(){
+ $session = $Global:cookie
+ $baseuri = $Global:baseuri
+ $uri = "$baseuri/types/sqlServerDatabase/instances"
+ 
+ $data = (Invoke-RestMethod -Uri $uri -Method Get -WebSession $session)
+
+ return $data.feed.entry.content.sqlServerDatabase
+
+
+}
+
+function Get-AppSyncSQLInstances(){
+ $session = $Global:cookie
+ $baseuri = $Global:baseuri
+ $uri = "$baseuri/types/sqlServerInstance/instances"
+ 
+ $data = (Invoke-RestMethod -Uri $uri -Method Get -WebSession $session)
+
+ return $data.feed.entry.content.sqlServerInstance
+
+
+}
+
+function Get-AppSyncHosts(){
+ $session = $Global:cookie
+ $baseuri = $Global:baseuri
+ $uri = "$baseuri/types/host/instances"
+ 
+ $data = (Invoke-RestMethod -Uri $uri -Method Get -WebSession $session)
+
+ return $data.feed.entry.content.host
+
+
+}
+
+###########################
 ###Error Handling/Status###
 ###########################
 

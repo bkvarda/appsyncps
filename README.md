@@ -35,6 +35,27 @@ This runs all service plans:
 ```
 Get-ServicePlans | ForEach-Object { Run-ServicePlan -id $_.id }
 ```
+This returns info about all hosts:
+```
+Get-AppSyncHosts
+```
+This returns info about all SQL Instances:
+```
+Get-AppSyncSQLInstances
+```
+This returns info about all SQL Databases:
+```
+Get-AppSyncSQLDatabases
+```
+This creates a 1st Generation copy of a DB
+```
+New-AppSyncGen1DBCopy -dbid <ID of DB you want to copy>
+```
+This creates a 2nd Generation copy of a DB
+```
+New-AppSyncGen2DBCopy -spid <ID of 1st Generation Copy Service Plan> -dbid <ID of DB you want to copy>
+```
+
 More to come...maybe
 
 ##Licensing
