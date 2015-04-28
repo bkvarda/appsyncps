@@ -1,0 +1,49 @@
+<servicePlan>
+  <name tag="SPName">New Plan</name>
+  <displayName tag="SPDisplayName">New_Plan</displayName>
+  <description tag="SPDescription">Mount Service Plan</description>
+  <dataset>
+    <type>sql</type>
+    <options>
+      <option>
+        <name>database</name>
+        <value>ac7af4c7-7e55-4651-a06c-18fc1efad627</value>
+      </option>
+    </options>
+  </dataset>
+  <phase>
+    <enabled>true</enabled>
+    <type>mount</type>
+    <name>Mount-Copy</name>
+    <description>Mount of Replica</description>
+    <displayName>Mount copy</displayName>
+    <options>
+      <option>
+        <name>mounthost</name>
+        <value>lrma147</value>
+      </option>
+      <option>
+        <name>mountpath</name>
+        <value>original</value>
+      </option>
+      <option>
+        <name>accesstype</name>
+        <value>readonly</value>
+      </option>
+      <option>
+        <name>copyMetadataPath</name>
+        <value>Default Path</value>
+      </option>
+      <option>
+        <name>useDedicatedStorageGroup</name>
+        <value>false</value>
+      </option>
+    </options>
+    <schedule>
+      <startCriteria>
+        <startTime/>
+        <startType>time</startType>
+      </startCriteria>
+    </schedule>
+  </phase>
+</servicePlan>

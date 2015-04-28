@@ -142,6 +142,7 @@ function Run-ServicePlan {
 function New-AppSyncGen1DBCopy($dbid){
   $session = $Global:cookie
   $baseuri = $Global:baseuri
+  $result =  New-Object PSObject
 
   $db = (Invoke-RestMethod -Uri "$baseuri/instances/sqlServerDatabase::$dbid" -Method Get -WebSession $session).feed.entry.content.sqlServerDatabase
   
@@ -194,7 +195,7 @@ function New-AppSyncGen1DBCopy($dbid){
   #run the service plan 
   $process = ($sp |Run-ServicePlan)
   
-  Write-Host "Serviceplan running..."
+  Write-Host "Gen1 Copy Initiated..."
   $limit = New-TimeSpan -Minutes 1
   $timer = [diagnostics.stopwatch]::StartNew()
 
@@ -203,18 +204,32 @@ function New-AppSyncGen1DBCopy($dbid){
   if($status.overallState -eq "Complete"){
       Write-Host -ForeGroundColor Green "Process complete with status:"$status.overallStatus
       Re-Auth
-      return $sp
+      break
   }
   Start-Sleep -Seconds 5
 
  }
+  $copyuri = "$baseuri/instances/servicePlan::$spid/relationships/copies"
+  $data =  (Invoke-RestMethod -Uri $copyuri -Method Get -WebSession $session).feed.entry.content.sqlServerDatabase
+  $copyid = $data.id
+  $result | Add-Member NoteProperty –Name dbid –Value $copyid
+  $result | Add-Member NoteProperty –Name spid –Value $spid
+  return $result
 
  
 }
 
-function New-AppSyncGen2DBCopy([string]$dbid, [string]$spid){
+function New-AppSyncGen2DBCopy{
+Param (
+    [parameter(ValueFromPipelineByPropertyName)]
+    [string]$dbid,
+    [parameter(ValueFromPipelineByPropertyName)]
+    [string]$spid
+)
+  
   $session = $Global:cookie
   $baseuri = $Global:baseuri
+  $result =  New-Object PSObject
 
   $db = (Invoke-RestMethod -Uri "$baseuri/instances/sqlServerDatabase::$dbid" -Method Get -WebSession $session).feed.entry.content.sqlServerDatabase
   
@@ -264,7 +279,7 @@ function New-AppSyncGen2DBCopy([string]$dbid, [string]$spid){
   #run the service plan 
   $process = ($sp |Run-ServicePlan)
   
-  Write-Host "Serviceplan running..."
+  Write-Host "Gen2 Copy Initiated..."
   $limit = New-TimeSpan -Minutes 1
   $timer = [diagnostics.stopwatch]::StartNew()
 
@@ -275,18 +290,79 @@ function New-AppSyncGen2DBCopy([string]$dbid, [string]$spid){
   if($status.overallState -eq "Complete"){
       Write-Host -ForeGroundColor Green "Process complete with status:"$status.overallStatus
       Re-Auth
-      return $sp
+      break
   }
   Start-Sleep -Seconds 5
 
  }
-
+  $copyuri = "$baseuri/instances/servicePlan::$spid/relationships/copies"
+  $data =  (Invoke-RestMethod -Uri $copyuri -Method Get -WebSession $session).feed.entry.content.sqlServerDatabase
+  $copyid = $data.id
+  $result | Add-Member NoteProperty –Name dbid –Value $copyid
+  $result | Add-Member NoteProperty –Name spid –Value $spid
+  return $result
 
 
 }
 
 function Mount-AppsyncCopy{
+Param (
+    [parameter(ValueFromPipelineByPropertyName)]
+    [string]$dbid,
+    [parameter(ValueFromPipelineByPropertyName)]
+    [string]$spid,
+    [string]$mounthost,
+    [string]$mountpath,
+    [string]$accesstype
 
+)
+  $session = $Global:cookie
+  $baseuri = $Global:baseuri
+
+  #format the mount XML payload
+  $mountxml = [xml](Get-Content "$PSScriptRoot\mount.xml") 
+  $mountxml.servicePlan.phase.options.option[0].value = $mounthost
+  $mountxml.servicePlan.phase.options.option[1].value = $mountpath
+  $mountxml.servicePlan.phase.options.option[2].value = $accesstype
+  $mountxml.servicePlan.dataset.options.option.value = $dbid
+
+  $body = ($mountxml.OuterXml)
+
+  
+  $pituri = "$baseuri/instances/sqlServerDatabase::$dbid/relationships/replicationPhasepit"
+
+  $date = (Invoke-RestMethod -Uri $pituri -Method Get -WebSession $session)
+
+  $pitid = $date.feed.entry.content.phasepit.id
+
+  #get the PID to execute mount against
+  $uri = "$baseuri/instances/phasepit::$pitid/action/run?StartPhaseName=Mount-Copy"
+
+  #mount the copy to the given host
+  $phaseid = (Invoke-RestMethod -Uri $uri -Method Post -Body $body -ContentType "application/xml" -WebSession $session).feed.entry
+
+
+    Write-Host "Mount Phase Initiated..."
+  $limit = New-TimeSpan -Minutes 10
+  $timer = [diagnostics.stopwatch]::StartNew()
+
+   while($timer.Elapsed -lt $limit){
+  $status=($phaseid | Get-PhasePitStatus)
+  if($status.state -eq "Complete"){
+      Write-Host -ForeGroundColor Green "Process complete with status:"$status.status
+      Re-Auth
+      break
+  }
+  Start-Sleep -Seconds 10
+
+ }
+
+ 
+
+
+}
+
+function Unmount-AppSyncCopy{
 
 
 }
@@ -343,10 +419,32 @@ Param (
 $baseuri = $Global:baseuri
 $session = $Global:cookie
 $uri = "$id/relationships/phaseStatus"
+ 
 
 $data = (Invoke-RestMethod -Uri $uri -Method Get -WebSession $session).feed.entry.content.phaseStatus
 $status = ($data.overallStatus)
 $state = ($data.overallState)
+Write-Host -ForegroundColor Yellow "Current state is : $state"
+Write-Host -ForegroundColor Yellow "Current status is : $status"
+
+$data
+
+}
+
+function Get-PhasePitStatus{
+Param (
+    [parameter(ValueFromPipelineByPropertyName)]
+    [string]$id
+)
+
+$baseuri = $Global:baseuri
+$session = $Global:cookie
+$uri = "$id"
+ 
+
+$data = (Invoke-RestMethod -Uri $uri -Method Get -WebSession $session).feed.entry.content.phasepit
+$status = ($data.phase.phaseProgressLabel)
+$state = ($data.state)
 Write-Host -ForegroundColor Yellow "Current state is : $state"
 Write-Host -ForegroundColor Yellow "Current status is : $status"
 
