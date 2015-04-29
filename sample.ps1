@@ -12,6 +12,6 @@ $g1 = (New-AppSyncGen1DBCopy -dbid $dbid)
 Write-Host "Creating 5 G2 copies"
 for($i = 0; $i -lt $numservers; $i++){
 
- New-AppSyncGen2DBCopy -dbid $g1.dbid -spid $g2.spid
+ New-AppSyncGen2DBCopy -dbid $g1.dbid -spid $g1.spid
 
 }

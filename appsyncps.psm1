@@ -357,7 +357,7 @@ Param (
 
  }
 
- 
+ $status.status
 
 
 }
@@ -395,6 +395,135 @@ $phaseid = (Invoke-RestMethod -Uri $uri -Method Post -Body $body -ContentType "a
   Start-Sleep -Seconds 10
 
  }
+ $status.status
+}
+
+#takes 1st or 2nd Generation ID
+function Refresh-AppSyncDatabaseCopy{
+Param (
+    [parameter(ValueFromPipelineByPropertyName)]
+    [string]$id
+
+
+)
+$baseuri = $Global:baseuri
+$session = $Global:cookie
+
+$uri = "$baseuri/instances/sqlServerDatabase::$id/relationships/replicationPhasepit"
+
+#gets the replication phase pit ID
+$phasepitid = (Invoke-RestMethod -Uri $uri -Method Get -WebSession $session).feed.entry.content.phasepit.id
+
+$uri = "$baseuri/instances/phasepit::$phasepitid/action/refresh?RefreshAllGens="+'"true"'
+
+$phaseid = (Invoke-RestMethod -Uri $uri -Method Post -WebSession $session).feed.entry
+
+    Write-Host "Refresh of all copies initiated..."
+  $limit = New-TimeSpan -Minutes 10
+  $timer = [diagnostics.stopwatch]::StartNew()
+
+   while($timer.Elapsed -lt $limit){
+  $status=($phaseid | Get-PhaseStatus)
+  if($status.overallState -eq "Complete"){
+      Write-Host -ForeGroundColor Green "Process complete with status:"$status.overallStatus
+      Re-Auth
+      break
+  }
+  Start-Sleep -Seconds 10
+
+ }
+
+
+
+}
+#Refresh all children of a primary database ID (first and second gens)
+function Refresh-AllAppSyncDatabaseCopies{
+Param (
+    [parameter(ValueFromPipelineByPropertyName)]
+    [string]$id
+
+
+)
+$baseuri = $Global:baseuri
+$session = $Global:cookie
+
+$copydata = (Get-AppSyncSQLDatabaseCopies -dbid $id) 
+
+###first do all gen 1s
+$g1data = $copydata | Where Generation -eq "1" | Select-Object
+$g2data = $copydata | Where Generation -eq "2" | Select-Object
+    $g1data | ForEach-Object{
+        
+        $unmountstatus = "Success"
+        Write-Host "Working on "$_.Name" with ID "$_.ID
+        #If it is mounted, get data about what is mounted and then unmount 
+        if($_.Mount_Status -eq "Mounted"){
+        
+        #Get info about the mount
+        $mountdata = Get-AppSyncMountInfo -dbid $id
+        $mountpath = $mountdata.value[1]
+        $mounthost = $mountdata.value[4]
+        $accesstype = $mountdata.value[5]
+
+        Re-Auth
+
+        #Unmount it
+        Write-Host "Unmounting "$_.Name" with ID "$_.ID
+        $unmountstatus = (Unmount-AppSyncCopy -dbid $_.ID)
+        Write-Host $unmountstatus
+        }
+        #Refresh it
+        if($unmountstatus -eq "Success"){
+        Write-Host "Refreshing "$_.Name" with ID "$_.ID
+        Refresh-AppSyncDatabaseCopy -id $_.ID
+        Re-Auth
+        }
+        #Mount it back to its original host if it was mounted before
+        if($_.Mount_Status -eq "Mounted" -and $unmountstatus -eq "Success"){
+        
+        #get our copy data to find the new ID which will be the most rescent
+        $copydataordered = ((Get-AppSyncSQLDatabaseCopies -dbid $id) | Sort-Object -Property Last_Modified -Descending)
+        $latestid = ($copydataordered | Select -first 1).id
+        Mount-AppsyncCopy -mounthost $mounthost -mountpath $mountpath -accesstype $accesstype -dbid $latestid
+        }
+
+        $unmountstatus = "Success"
+
+     }
+    ###then do all gen 2s
+     $g2data | ForEach-Object{
+        
+        $unmountstatus = "Success"
+        Write-Host "Working on "$_.Name" with ID "$_.ID
+        #If it is mounted, get data about what is mounted and then unmount 
+        if($_.Mount_Status -eq "Mounted"){
+        
+        #Get info about the mount
+        $mountdata = Get-AppSyncMountInfo -dbid $id
+        $mountpath = $mountdata.value[1]
+        $mounthost = $mountdata.value[4]
+        $accesstype = $mountdata.value[5]
+
+        #Unmount it
+        Write-Host "Unmounting "$_.Name" with ID "$_.ID
+        $unmountstatus = (Unmount-AppSyncCopy -dbid $_.ID)
+        Write-Host $unmountstatus
+        }
+        #Refresh it
+        if($unmountstatus -eq "Success"){
+        Write-Host "Refreshing "$_.Name" with ID "$_.ID
+        Refresh-AppSyncDatabaseCopy -id $_.ID
+        }
+        #Mount it back to its original host if it was mounted before
+        if($_.Mount_Status -eq "Mounted" -and $unmountstatus -eq "Success"){
+        
+        #get our copy data to find the new ID which will be the most rescent
+        $copydataordered = ((Get-AppSyncSQLDatabaseCopies -dbid $id) | Sort-Object -Property Last_Modified -Descending)
+        $latestid = ($copydataordered | Select -first 1).id
+        Mount-AppsyncCopy -mounthost $mounthost -mountpath $mountpath -accesstype $accesstype -dbid $latestid
+        }
+
+     }
 
 }
 
@@ -417,17 +546,47 @@ return $sps
 
 }
 
+function Get-AppSyncMountInfo([string] $dbid){
+$baseuri = $Global:baseuri
+$session = $Global:cookie
+
+$uri = "$baseuri/instances/sqlServerDatabase::$dbid/relationships/mountPhasepit"
+
+$data = (Invoke-RestMethod -Uri $uri -Method Get -WebSession $session).feed.entry.content.phasepit.phase.options.option
+
+$data
+
+}
+
 #Given root database ID, returns all copies 
 function Get-AppSyncSQLDatabaseCopies([string] $dbid){
 
 $baseuri = $Global:baseuri
 $session = $Global:cookie
 
-$uri = "$baseuri/instances/sqlServerDatabase::$dbid/relationships/copies"
+$output =  @()
 
-$data = (Invoke-RestMethod -Uri $uri -Method Get -WebSession $session).feed.entry
+$uri = "$baseuri/instances/sqlServerDatabase::$dbid/relationships/copies?GUI=true&CATALOGONLY=false"
 
-return $data | Sort-Object -Property updated -Descending
+$data = (Invoke-RestMethod -Uri $uri -Method Get -WebSession $session).feed.entry.content.sqlServerDatabase
+
+    $data | ForEach-Object {
+         $result =  New-Object PSObject
+
+         $result | Add-Member NoteProperty -Name Name -Value $_.name
+         $result | Add-Member NoteProperty -Name Last_Modified -Value $_.lastModifiedFormatted
+         $result | Add-Member NoteProperty -Name ID -Value $_.id
+         $result | Add-Member NoteProperty –Name Generation –Value $_.copyRepurposeGeneration
+         $result | Add-Member NoteProperty –Name Parent_ID –Value $_.copyRepurposeParentCopy
+         $result | Add-Member NoteProperty –Name Mount_Status –Value $_.copyMountStatus
+         $result | Add-Member NoteProperty –Name Host –Value $_.host
+         $result | Add-Member NoteProperty –Name Instance –Value $_.instanceName
+
+         $output += $result
+
+    }
+
+ return $output
 
 }
 
@@ -439,11 +598,25 @@ return $data | Sort-Object -Property updated -Descending
 function Get-AppSyncSQLDatabases(){
  $session = $Global:cookie
  $baseuri = $Global:baseuri
+ $output =  @()
  $uri = "$baseuri/types/sqlServerDatabase/instances"
  
- $data = (Invoke-RestMethod -Uri $uri -Method Get -WebSession $session)
+ $data = (Invoke-RestMethod -Uri $uri -Method Get -WebSession $session).feed.entry.content.sqlServerDatabase
 
- return $data.feed.entry.content.sqlServerDatabase
+
+    $data | ForEach-Object {
+         $result =  New-Object PSObject
+
+         $result | Add-Member NoteProperty -Name Name -Value $_.name
+         $result | Add-Member NoteProperty -Name Last_Modified -Value $_.lastModifiedFormatted
+         $result | Add-Member NoteProperty -Name ID -Value $_.id
+         $result | Add-Member NoteProperty –Name DB_Status –Value $_.databaseStatus
+
+         $output += $result
+
+    }
+
+return $output
 
 
 }
