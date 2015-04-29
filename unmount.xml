@@ -1,0 +1,12 @@
+<servicePlan>
+  <description tag="SPDescription">Service_Plan_mount</description>
+  <displayName tag="SPDisplayName">Service_Plan_mount</displayName>
+  <name tag="SPName">UnMount</name>
+  <phase>
+    <enabled>true</enabled>
+    <type>unmount</type>
+    <name>unmount-1</name>
+    <displayName>Unmount Copy</displayName>
+    <description>unmount replica</description>
+  </phase>
+</servicePlan>

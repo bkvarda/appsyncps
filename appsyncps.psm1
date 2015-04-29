@@ -361,11 +361,77 @@ Param (
 
 
 }
+#need a DBID/ID of DB copy
+function Unmount-AppSyncCopy([string] $dbid){
 
-function Unmount-AppSyncCopy{
+$baseuri = $Global:baseuri
+$session = $Global:cookie
+
+$uri = "$baseuri/instances/sqlServerDatabase::$dbid/relationships/mountPhasepit"
+
+#Get the mount status of the copy/db, save the phasepit ID for use in unmount operation. 
+
+$phasepitid = (Invoke-RestMethod -Uri $uri -Method Get -WebSession $session).feed.entry.content.phasepit.id
+
+
+
+$uri = "$baseuri/instances/phasepit::$phasepitid/action/run"
+$unmountxml = [xml](Get-Content "$PSScriptRoot\unmount.xml")
+$body = ($unmountxml.OuterXml)
+
+$phaseid = (Invoke-RestMethod -Uri $uri -Method Post -Body $body -ContentType "application/xml" -WebSession $session).feed.entry
+
+    Write-Host "Unmount Phase Initiated..."
+  $limit = New-TimeSpan -Minutes 10
+  $timer = [diagnostics.stopwatch]::StartNew()
+
+   while($timer.Elapsed -lt $limit){
+  $status=($phaseid | Get-PhasePitStatus)
+  if($status.state -eq "Complete"){
+      Write-Host -ForeGroundColor Green "Process complete with status:"$status.status
+      Re-Auth
+      break
+  }
+  Start-Sleep -Seconds 10
+
+ }
+
+}
+
+
+
+
+function Get-RepurposeServicePlans(){
+$baseuri = $Global:baseuri
+$session = $Global:cookie
+
+$uri = "$baseuri/types/servicePlan/instances?application=sql&planType=Repurposing"
+
+$data = (Invoke-RestMethod -Uri $uri -Method Get -WebSession $session).feed.entry
+
+$sps = $data | Where title -NotLike "*UNUSED*" | Select-Object
+
+return $sps
+
 
 
 }
+
+#Given root database ID, returns all copies 
+function Get-AppSyncSQLDatabaseCopies([string] $dbid){
+
+$baseuri = $Global:baseuri
+$session = $Global:cookie
+
+$uri = "$baseuri/instances/sqlServerDatabase::$dbid/relationships/copies"
+
+$data = (Invoke-RestMethod -Uri $uri -Method Get -WebSession $session).feed.entry
+
+return $data | Sort-Object -Property updated -Descending
+
+}
+
+
 
 ###########################
 ##SQL Related Commands#####
