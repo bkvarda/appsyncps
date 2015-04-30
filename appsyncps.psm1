@@ -1,4 +1,5 @@
-﻿#Appsync API STUFFzzzzz
+﻿#Appsyncps
+#Author: Brandon Kvarda
 
 #####Global Var#######
 $Global:cookie = $null
@@ -35,8 +36,15 @@ add-type @"
         $BSTR = [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($secpassword)
         $password = [System.Runtime.InteropServices.Marshal]::PtrToStringAuto($BSTR)
     }
+
+     else{
     
-    $baseuri = "https://$server"+':8445'+"/appsync/rest"
+    $username = Read-Host -Prompt "Enter AppSync username"
+    $password = Read-Host -Prompt "Enter password" -AsSecureString
+    }  
+     
+    
+    $baseuri = "https://"+$server+':8445'+"/appsync/rest"
     $loginuri = "https://"+$server+":8444/cas-server/login?TARGET=https://"+$server+":8445/appsync/" 
     
 
@@ -63,6 +71,15 @@ add-type @"
 
 #Gets list of Service Plans
 function Get-ServicePlans(){
+
+    <#
+     .DESCRIPTION
+      Returns a list of defined service plans 
+      
+      .EXAMPLE
+      Get-ServicePlans
+  #>
+
  $session = $Global:cookie
  $baseuri = $Global:baseuri
  $uri = "$baseuri/types/servicePlan/instances"
@@ -257,7 +274,7 @@ Param (
   $g2xml.servicePlan.name.'#text' = ($next2g.name.'#text').toString()
   $g2xml.servicePlan.displayName.'#text' = ($next2g.displayName.'#text').toString()
   
-  #generate XML payloud for new service plan
+  #generate XML payload for new service plan
   $body = ($g2xml.OuterXml)
   
   $uri = "$baseuri/types/servicePlan/instances"
@@ -293,7 +310,7 @@ Param (
   $timer = [diagnostics.stopwatch]::StartNew()
 
  
-
+  #monitor the progress
   while($timer.Elapsed -lt $limit){
   $status=($process | Get-PhaseStatus)
   if($status.overallState -eq "Complete"){
@@ -304,6 +321,7 @@ Param (
   Start-Sleep -Seconds 5
 
  }
+ #return the service plan id and the new copy id aka dbid
   $copyuri = "$baseuri/instances/servicePlan::$spid/relationships/copies"
   $data =  (Invoke-RestMethod -Uri $copyuri -Method Get -WebSession $session).feed.entry.content.sqlServerDatabase
   $copyid = $data.id
@@ -383,14 +401,16 @@ $uri = "$baseuri/instances/sqlServerDatabase::$dbid/relationships/mountPhasepit"
 $phasepitid = (Invoke-RestMethod -Uri $uri -Method Get -WebSession $session).feed.entry.content.phasepit.id
 
 
-
+#build the xml payload and request
 $uri = "$baseuri/instances/phasepit::$phasepitid/action/run"
 $unmountxml = [xml](Get-Content "$PSScriptRoot\unmount.xml")
 $body = ($unmountxml.OuterXml)
 
+#initiate the unmount
 $phaseid = (Invoke-RestMethod -Uri $uri -Method Post -Body $body -ContentType "application/xml" -WebSession $session).feed.entry
-
-    Write-Host "Unmount Phase Initiated..."
+  
+  #Monitor unmount status
+  Write-Host "Unmount Phase Initiated..."
   $limit = New-TimeSpan -Minutes 10
   $timer = [diagnostics.stopwatch]::StartNew()
 
@@ -568,7 +588,15 @@ $data
 }
 
 #Given root database ID, returns all copies 
-function Get-AppSyncSQLDatabaseCopies([string] $dbid){
+function Get-AppSyncSQLDatabaseCopies{
+Param (
+    [parameter(ValueFromPipelineByPropertyName)]
+    [string]$ID,
+    [string]$dbid
+)
+
+if($ID){
+$dbid = $ID}
 
 $baseuri = $Global:baseuri
 $session = $Global:cookie
