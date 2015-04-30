@@ -139,7 +139,16 @@ function Run-ServicePlan {
 
 
 # id = unique identifier of DB
-function New-AppSyncGen1DBCopy($dbid){
+function New-AppSyncGen1DBCopy{
+  Param (
+    [parameter(ValueFromPipelineByPropertyName)]
+    [string]$id,
+    [string]$dbid
+)
+
+  if($id){
+   $dbid = $id
+  }
   $session = $Global:cookie
   $baseuri = $Global:baseuri
   $result =  New-Object PSObject

@@ -1,6 +1,6 @@
 # AppSyncPS
 
-AppSyncPS wraps AppSync REST API calls into PowerShell functions
+AppSyncPS wraps AppSync REST API calls into PowerShell functions. This is currently intended for SQL workflows. 
 
 ## Installation
 
@@ -54,6 +54,22 @@ New-AppSyncGen1DBCopy -dbid <ID of DB you want to copy>
 This creates a 2nd Generation copy of a DB
 ```
 New-AppSyncGen2DBCopy -spid <ID of 1st Generation Copy Service Plan> -dbid <ID of DB you want to copy>
+```
+You can query a source DB, grab the ID, create a 1st gen copy, create a 2nd gen copy of it, and mount it like this:
+```
+Get-AppSyncSQLDatabases | Where Name -eq "POC" | New-AppSyncGen1DBCopy | New-AppSyncGen2DBCopy | Mount-AppSyncCopy -mounthost "Host1" -mountpath "Default Path" -accesstype "readonly"
+```
+You can refresh a DB copy like this:
+```
+Get-AppSyncSQLDatabaseCopies | Where Name -eq "POC01" | Refresh-AppSyncDatabaseCopy
+```
+You can unmount all mounted Gen 2 DB copies like this:
+```
+Get-AppSyncSQLDatabaseCopies | Where Generation -eq "2" -and Mount_Status -eq "Mounted" | Unmount-AppSyncCopy 
+```
+You can orderly refresh all Gen 1 and Gen 2 databases associated with a gold/primary DB (takes care of unmounts and remounts as well):
+```
+Get-AppSyncSQLDatabases | Where Name -eq "POC" | Refresh-AllAppSyncDatabaseCopies 
 ```
 
 More to come...maybe
