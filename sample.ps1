@@ -1,8 +1,8 @@
 ﻿
 $numservers = 5
-$dbid = "a0e171ed-e723-4dfb-8ba4-04cf1afab0fa"
+$dbid = "ca4ff8f0-7348-4540-b8d5-ac3d1c411a98"
 
-New-AppSyncSession -server lrma109 -credspath C:\temp
+New-AppSyncSession -server msappsync -credspath C:\temp
 
 Write-Host "Creating our single G1 copy"
 $g1 = (New-AppSyncGen1DBCopy -dbid $dbid)

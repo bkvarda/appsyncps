@@ -438,16 +438,19 @@ Param (
 $baseuri = $Global:baseuri
 $session = $Global:cookie
 
-$uri = "$baseuri/instances/sqlServerDatabase::$id/relationships/replicationPhasepit"
+$initialcopies = (Get-AppSyncSQLDatabaseCopies -id $id | Sort-Object -Property Last_Modified -Descending)
+
+$uri = "$baseuri/instances/sqlServerDatabase::$id/relationships/replicationPhasepit?GUI=true"
 
 #gets the replication phase pit ID
 $phasepitid = (Invoke-RestMethod -Uri $uri -Method Get -WebSession $session).feed.entry.content.phasepit.id
 
-$uri = "$baseuri/instances/phasepit::$phasepitid/action/refresh?RefreshAllGens="+'"true"'
+
+$uri = "$baseuri/instances/phasepit::$phasepitid/action/refresh"
 
 $phaseid = (Invoke-RestMethod -Uri $uri -Method Post -WebSession $session).feed.entry
 
-    Write-Host "Refresh of all copies initiated..."
+    Write-Host "Refresh of copy initiated..."
   $limit = New-TimeSpan -Minutes 10
   $timer = [diagnostics.stopwatch]::StartNew()
 
@@ -462,7 +465,23 @@ $phaseid = (Invoke-RestMethod -Uri $uri -Method Post -WebSession $session).feed.
 
  }
 
+ #look for any orphaned copies if failure created them and get rid of them
+ if($status.overallStatus -eq "Failed"){
+ $currentcopies = (Get-AppSyncSQLDatabaseCopies -id $id | Sort-Object -Property Last_Modified -Descending)
+ $currentfirst = ($currentcopies | Select -First 1 | Select ID).ID
+ $initialfirst = ($initialcopies | Select -First 1 | Select ID).ID
 
+ Write-Host "Current is $currentfirst, initial is $initialfirst"
+
+   if($currentfirst -ne $initialfirst){
+     Write-Host "Expiring $currentfirst"
+     Expire-AppSyncSQLDatabaseCopy -id $currentfirst
+
+   }
+ 
+ }
+
+ return $status.overallStatus
 
 }
 #Refresh all children of a primary database ID (first and second gens)
@@ -476,23 +495,30 @@ Param (
 $baseuri = $Global:baseuri
 $session = $Global:cookie
 
-$copydata = (Get-AppSyncSQLDatabaseCopies -dbid $id) 
+$copydata = (Get-AppSyncSQLDatabaseCopies -dbid $id)
+$g1failures = @()
 
 ###first do all gen 1s
 $g1data = $copydata | Where Generation -eq "1" | Select-Object
 $g2data = $copydata | Where Generation -eq "2" | Select-Object
     $g1data | ForEach-Object{
         
+        #These start at Success and track step completion to determine whether next steps should occur
         $unmountstatus = "Success"
+        $refreshstatus = "Successful"
+        
         Write-Host "Working on "$_.Name" with ID "$_.ID
         #If it is mounted, get data about what is mounted and then unmount 
         if($_.Mount_Status -eq "Mounted"){
         
         #Get info about the mount
-        $mountdata = Get-AppSyncMountInfo -dbid $id
-        $mountpath = $mountdata.value[1]
-        $mounthost = $mountdata.value[4]
-        $accesstype = $mountdata.value[5]
+        $mountdata = Get-AppSyncMountInfo -dbid $_.ID
+        $mountpath = $mountdata["actualMountPath"]
+        $mounthost = $mountdata["mounthost"]
+        $accesstype = $mountdata["accesstype"]
+        $copymetadatapath = $mountdata["actualMetadataPath"]
+
+        Write-Host $_.ID " is mounted on "$mounthost " at mount point "$mountpath " with access type of "$accesstype
 
         Re-Auth
 
@@ -504,11 +530,11 @@ $g2data = $copydata | Where Generation -eq "2" | Select-Object
         #Refresh it
         if($unmountstatus -eq "Success"){
         Write-Host "Refreshing "$_.Name" with ID "$_.ID
-        Refresh-AppSyncDatabaseCopy -id $_.ID
+        $refreshstatus = (Refresh-AppSyncDatabaseCopy -id $_.ID)
         Re-Auth
         }
         #Mount it back to its original host if it was mounted before
-        if($_.Mount_Status -eq "Mounted" -and $unmountstatus -eq "Success"){
+        if($_.Mount_Status -eq "Mounted" -and $unmountstatus -eq "Success" -and $refreshstatus -eq "Successful"){
         
         #get our copy data to find the new ID which will be the most rescent
         $copydataordered = ((Get-AppSyncSQLDatabaseCopies -dbid $id) | Sort-Object -Property Last_Modified -Descending)
@@ -516,22 +542,43 @@ $g2data = $copydata | Where Generation -eq "2" | Select-Object
         Mount-AppsyncCopy -mounthost $mounthost -mountpath $mountpath -accesstype $accesstype -dbid $latestid
         }
 
+        #if there was a failed refresh, track the ID so we don't try to refresh it's g2 children
+        if($refreshstatus -ne "Successful"){
+         $g1failures += $_.ID
+        }
+
+        #reset tracking variables for next one
         $unmountstatus = "Success"
+        $refreshstatus = "Successful"
 
      }
     ###then do all gen 2s
      $g2data | ForEach-Object{
         
+        $parentsuccess = $true
+        #check to see if parent g1 failed, if so, don't attempt any of these steps
+        foreach($failure in $g1failures){
+           
+           if($_.Parent_ID -eq $failure){
+
+              $parentsuccess = $false
+           }
+        }
+        
+        
         $unmountstatus = "Success"
+        $refreshstatus = "Successful"
         Write-Host "Working on "$_.Name" with ID "$_.ID
+        if(!$parentsuccess){Write-Host "Parent failed refresh, skipping g2 refresh"}
         #If it is mounted, get data about what is mounted and then unmount 
-        if($_.Mount_Status -eq "Mounted"){
+        if($_.Mount_Status -eq "Mounted" -and $parentsuccess){
         
         #Get info about the mount
-        $mountdata = Get-AppSyncMountInfo -dbid $id
-        $mountpath = $mountdata.value[1]
-        $mounthost = $mountdata.value[4]
-        $accesstype = $mountdata.value[5]
+        $mountdata = Get-AppSyncMountInfo -dbid $_.ID
+        $mountpath = $mountdata["actualMountPath"]
+        $mounthost = $mountdata["mounthost"]
+        $accesstype = $mountdata["accesstype"]
+        $copymetadatapath = $mountdata["actualMetadataPath"]
 
         #Unmount it
         Write-Host "Unmounting "$_.Name" with ID "$_.ID
@@ -539,12 +586,12 @@ $g2data = $copydata | Where Generation -eq "2" | Select-Object
         Write-Host $unmountstatus
         }
         #Refresh it
-        if($unmountstatus -eq "Success"){
+        if($unmountstatus -eq "Success" -and $parentsuccess){
         Write-Host "Refreshing "$_.Name" with ID "$_.ID
-        Refresh-AppSyncDatabaseCopy -id $_.ID
+        $refreshstatus = (Refresh-AppSyncDatabaseCopy -id $_.ID)
         }
         #Mount it back to its original host if it was mounted before
-        if($_.Mount_Status -eq "Mounted" -and $unmountstatus -eq "Success"){
+        if($_.Mount_Status -eq "Mounted" -and $unmountstatus -eq "Success" -and $refreshstatus -eq "Successful" -and $parentsuccess){
         
         #get our copy data to find the new ID which will be the most rescent
         $copydataordered = ((Get-AppSyncSQLDatabaseCopies -dbid $id) | Sort-Object -Property Last_Modified -Descending)
@@ -552,7 +599,31 @@ $g2data = $copydata | Where Generation -eq "2" | Select-Object
         Mount-AppsyncCopy -mounthost $mounthost -mountpath $mountpath -accesstype $accesstype -dbid $latestid
         }
 
+        #reset tracking variables
+         $unmountstatus = "Success"
+         $refreshstatus = "Successful"
      }
+
+}
+
+function Expire-AppSyncSQLDatabaseCopy{
+Param (
+    [parameter(ValueFromPipelineByPropertyName)]
+    [string]$id
+
+
+)
+$baseuri = $Global:baseuri
+$session = $Global:cookie
+
+$uri = "$baseuri/instances/sqlServerDatabase::$id/action/expire"
+
+Write-Host "Expiring $id"
+
+$data = (Invoke-RestMethod -Uri $uri -Method Post -ContentType "application/xml" -WebSession $session)
+
+$data
+
 
 }
 
@@ -581,9 +652,16 @@ $session = $Global:cookie
 
 $uri = "$baseuri/instances/sqlServerDatabase::$dbid/relationships/mountPhasepit"
 
-$data = (Invoke-RestMethod -Uri $uri -Method Get -WebSession $session).feed.entry.content.phasepit.phase.options.option
+$options = (Invoke-RestMethod -Uri $uri -Method Get -WebSession $session).feed.entry.content.phasepit.phase.options.option
 
-$data
+$hash = @{}
+
+  foreach ($option in $options){
+    
+    $hash.Add($option.name,$option.value)
+
+  }
+$hash
 
 }
 
