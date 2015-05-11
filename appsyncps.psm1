@@ -222,7 +222,7 @@ function New-AppSyncGen1DBCopy{
   $process = ($sp |Run-ServicePlan)
   
   Write-Host "Gen1 Copy Initiated..."
-  $limit = New-TimeSpan -Minutes 1
+  $limit = New-TimeSpan -Minutes 2
   $timer = [diagnostics.stopwatch]::StartNew()
 
   while($timer.Elapsed -lt $limit){
@@ -411,7 +411,7 @@ $phaseid = (Invoke-RestMethod -Uri $uri -Method Post -Body $body -ContentType "a
   
   #Monitor unmount status
   Write-Host "Unmount Phase Initiated..."
-  $limit = New-TimeSpan -Minutes 10
+  $limit = New-TimeSpan -Minutes 15
   $timer = [diagnostics.stopwatch]::StartNew()
 
    while($timer.Elapsed -lt $limit){
@@ -465,22 +465,6 @@ $phaseid = (Invoke-RestMethod -Uri $uri -Method Post -WebSession $session).feed.
 
  }
 
- #look for any orphaned copies if failure created them and get rid of them
- if($status.overallStatus -eq "Failed"){
- $currentcopies = (Get-AppSyncSQLDatabaseCopies -id $id | Sort-Object -Property Last_Modified -Descending)
- $currentfirst = ($currentcopies | Select -First 1 | Select ID).ID
- $initialfirst = ($initialcopies | Select -First 1 | Select ID).ID
-
- Write-Host "Current is $currentfirst, initial is $initialfirst"
-
-   if($currentfirst -ne $initialfirst){
-     Write-Host "Expiring $currentfirst"
-     Expire-AppSyncSQLDatabaseCopy -id $currentfirst
-
-   }
- 
- }
-
  return $status.overallStatus
 
 }
@@ -527,12 +511,31 @@ $g2data = $copydata | Where Generation -eq "2" | Select-Object
         $unmountstatus = (Unmount-AppSyncCopy -dbid $_.ID)
         Write-Host $unmountstatus
         }
-        #Refresh it
+        #Refresh it. This can take multiple attempts for various reasons, it's cleaner if we try many times
         if($unmountstatus -eq "Success"){
-        Write-Host "Refreshing "$_.Name" with ID "$_.ID
-        $refreshstatus = (Refresh-AppSyncDatabaseCopy -id $_.ID)
-        Re-Auth
+        $attempt = 0
+        $newid = $_.ID
+          while($attempt -lt 5){
+             Write-Host "Refreshing "$_.Name" with ID "$newid
+             $refreshstatus = (Refresh-AppSyncDatabaseCopy -id $newid)
+             Re-Auth
+
+               if($refreshstatus -ne "Successful"){
+                 $currentcopies = (Get-AppSyncSQLDatabaseCopies -id $id | Sort-Object -Property Last_Modified -Descending)
+                 $newid = ($currentcopies | Select -First 1 | Select ID).ID
+                 $attempt ++
+                 Start-Sleep -Seconds 15
+               }
+               else{
+                 
+                 break
+
+               }
+             }
+       
         }
+
+
         #Mount it back to its original host if it was mounted before
         if($_.Mount_Status -eq "Mounted" -and $unmountstatus -eq "Success" -and $refreshstatus -eq "Successful"){
         
@@ -545,6 +548,7 @@ $g2data = $copydata | Where Generation -eq "2" | Select-Object
         #if there was a failed refresh, track the ID so we don't try to refresh it's g2 children
         if($refreshstatus -ne "Successful"){
          $g1failures += $_.ID
+
         }
 
         #reset tracking variables for next one
@@ -585,10 +589,29 @@ $g2data = $copydata | Where Generation -eq "2" | Select-Object
         $unmountstatus = (Unmount-AppSyncCopy -dbid $_.ID)
         Write-Host $unmountstatus
         }
+        Start-Sleep -Seconds 10
         #Refresh it
         if($unmountstatus -eq "Success" -and $parentsuccess){
-        Write-Host "Refreshing "$_.Name" with ID "$_.ID
-        $refreshstatus = (Refresh-AppSyncDatabaseCopy -id $_.ID)
+        $attempt = 0
+        $newid = $_.ID
+          while($attempt -lt 1){
+             Write-Host "Refreshing "$_.Name" with ID "$newid
+             $refreshstatus = (Refresh-AppSyncDatabaseCopy -id $newid)
+             Re-Auth
+
+               if($refreshstatus -ne "Successful"){
+                 $currentcopies = (Get-AppSyncSQLDatabaseCopies -id $id | Sort-Object -Property Last_Modified -Descending)
+                 $newid = ($currentcopies | Select -First 1 | Select ID).ID
+                 $attempt ++
+                 Start-Sleep -Seconds 20
+
+               }
+               else{
+                 
+                 break
+
+               }
+             }
         }
         #Mount it back to its original host if it was mounted before
         if($_.Mount_Status -eq "Mounted" -and $unmountstatus -eq "Success" -and $refreshstatus -eq "Successful" -and $parentsuccess){
