@@ -10,7 +10,24 @@ $Global:username=$null
 ######################
 
 #Starts a new session (logs into cas server and stores cookie as $session)
-function New-AppSyncSession([string]$server,[string]$username,[string]$password, [string]$credspath){
+function New-AppSyncSession{
+
+[cmdletbinding()]
+
+Param (
+    [parameter()]
+    [string]$server,
+
+    [parameter()]
+    [string]$username,
+    
+    [parameter()]
+    [string]$password,
+
+    [parameter()]
+    [string]$credspath
+
+  )
 
 #This bypasses cert validation
 add-type @"
@@ -79,6 +96,9 @@ function Get-ServicePlans(){
       .EXAMPLE
       Get-ServicePlans
   #>
+  [cmdletbinding()]
+  
+  Param()
 
  $session = $Global:cookie
  $baseuri = $Global:baseuri
@@ -92,6 +112,7 @@ function Get-ServicePlans(){
 #Gets a Service Plan
 function Get-ServicePlan{
 
+[cmdletbinding()]
 Param (
     [parameter(ValueFromPipelineByPropertyName)]
     [string]$id,
@@ -157,6 +178,7 @@ function Run-ServicePlan {
 
 # id = unique identifier of DB
 function New-AppSyncGen1DBCopy{
+  [cmdletbinding()]
   Param (
     [parameter(ValueFromPipelineByPropertyName)]
     [string]$id,
@@ -228,7 +250,7 @@ function New-AppSyncGen1DBCopy{
   while($timer.Elapsed -lt $limit){
   $status=($process | Get-PhaseStatus)
   if($status.overallState -eq "Complete"){
-      Write-Host -ForeGroundColor Green "Process complete with status:"$status.overallStatus
+      Write-Host "Process complete with status:"$status.overallStatus
       Re-Auth
       break
   }
@@ -246,6 +268,9 @@ function New-AppSyncGen1DBCopy{
 }
 
 function New-AppSyncGen2DBCopy{
+
+[cmdletbinding()]
+
 Param (
     [parameter(ValueFromPipelineByPropertyName)]
     [string]$dbid,
@@ -314,7 +339,7 @@ Param (
   while($timer.Elapsed -lt $limit){
   $status=($process | Get-PhaseStatus)
   if($status.overallState -eq "Complete"){
-      Write-Host -ForeGroundColor Green "Process complete with status:"$status.overallStatus
+      Write-Host "Process complete with status:"$status.overallStatus
       Re-Auth
       break
   }
@@ -333,6 +358,9 @@ Param (
 }
 
 function Mount-AppsyncCopy{
+
+[cmdletbinding()]
+
 Param (
     [parameter(ValueFromPipelineByPropertyName)]
     [string]$dbid,
@@ -389,7 +417,16 @@ Param (
 
 }
 #need a DBID/ID of DB copy
-function Unmount-AppSyncCopy([string] $dbid){
+function Unmount-AppSyncCopy{
+
+[cmdletbinding()]
+
+Param(
+[parameter()]
+[string]$dbid
+
+
+)
 
 $baseuri = $Global:baseuri
 $session = $Global:cookie
@@ -429,6 +466,9 @@ $phaseid = (Invoke-RestMethod -Uri $uri -Method Post -Body $body -ContentType "a
 
 #takes 1st or 2nd Generation ID
 function Refresh-AppSyncDatabaseCopy{
+
+[cmdletbinding()]
+
 Param (
     [parameter(ValueFromPipelineByPropertyName)]
     [string]$id
@@ -468,14 +508,16 @@ $phaseid = (Invoke-RestMethod -Uri $uri -Method Post -WebSession $session).feed.
  return $status.overallStatus
 
 }
-#Refresh all children of a primary database ID (first and second gens)
+#Refresh all children of a primary database ID (first and second gens). We do this synchronously due to limited relationship between old copy and new
 function Refresh-AllAppSyncDatabaseCopies{
-Param (
+
+[cmdletbinding()]
+
+Param(
     [parameter(ValueFromPipelineByPropertyName)]
     [string]$id
-
-
 )
+
 $baseuri = $Global:baseuri
 $session = $Global:cookie
 
@@ -511,7 +553,7 @@ $g2data = $copydata | Where Generation -eq "2" | Select-Object
         $unmountstatus = (Unmount-AppSyncCopy -dbid $_.ID)
         Write-Host $unmountstatus
         }
-        #Refresh it. This can take multiple attempts for various reasons, it's cleaner if we try many times
+        #Refresh it. This can take multiple attempts for various reasons, it's cleaner if we try many times for success on G1
         if($unmountstatus -eq "Success"){
         $attempt = 0
         $newid = $_.ID
@@ -630,6 +672,9 @@ $g2data = $copydata | Where Generation -eq "2" | Select-Object
 }
 
 function Expire-AppSyncSQLDatabaseCopy{
+
+[cmdletbinding()]
+
 Param (
     [parameter(ValueFromPipelineByPropertyName)]
     [string]$id
@@ -653,7 +698,12 @@ $data
 
 
 
-function Get-RepurposeServicePlans(){
+function Get-RepurposeServicePlans{
+
+[cmdletbinding()]
+
+Param()
+
 $baseuri = $Global:baseuri
 $session = $Global:cookie
 
@@ -669,7 +719,15 @@ return $sps
 
 }
 
-function Get-AppSyncMountInfo([string] $dbid){
+function Get-AppSyncMountInfo{
+
+[cmdletbinding()]
+
+Param(
+[parameter()]
+[string]$dbid
+
+)
 $baseuri = $Global:baseuri
 $session = $Global:cookie
 
@@ -690,6 +748,9 @@ $hash
 
 #Given root database ID, returns all copies 
 function Get-AppSyncSQLDatabaseCopies{
+
+[cmdletbinding()]
+
 Param (
     [parameter(ValueFromPipelineByPropertyName)]
     [string]$ID,
@@ -733,7 +794,12 @@ $data = (Invoke-RestMethod -Uri $uri -Method Get -WebSession $session).feed.entr
 ###########################
 ##SQL Related Commands#####
 ###########################
-function Get-AppSyncSQLDatabases(){
+function Get-AppSyncSQLDatabases{
+ 
+ [cmdletbinding()]
+
+ Param()
+ 
  $session = $Global:cookie
  $baseuri = $Global:baseuri
  $output =  @()
@@ -754,12 +820,17 @@ function Get-AppSyncSQLDatabases(){
 
     }
 
-return $output
+ $output
 
 
 }
 
-function Get-AppSyncSQLInstances(){
+function Get-AppSyncSQLInstances{
+ 
+ [cmdletbinding()]
+
+ Param()
+ 
  $session = $Global:cookie
  $baseuri = $Global:baseuri
  $uri = "$baseuri/types/sqlServerInstance/instances"
@@ -771,7 +842,12 @@ function Get-AppSyncSQLInstances(){
 
 }
 
-function Get-AppSyncHosts(){
+function Get-AppSyncHosts{
+ 
+ [cmdletbinding()]
+
+ Param()
+ 
  $session = $Global:cookie
  $baseuri = $Global:baseuri
  $uri = "$baseuri/types/host/instances"
@@ -788,6 +864,7 @@ function Get-AppSyncHosts(){
 ###########################
 
 function Get-PhaseStatus{
+[cmdletbinding()]
 Param (
     [parameter(ValueFromPipelineByPropertyName)]
     [string]$id
@@ -801,14 +878,15 @@ $uri = "$id/relationships/phaseStatus"
 $data = (Invoke-RestMethod -Uri $uri -Method Get -WebSession $session).feed.entry.content.phaseStatus
 $status = ($data.overallStatus)
 $state = ($data.overallState)
-Write-Host -ForegroundColor Yellow "Current state is : $state"
-Write-Host -ForegroundColor Yellow "Current status is : $status"
+Write-Verbose "Current state is : $state"
+Write-Verbose "Current status is : $status"
 
 $data
 
 }
 
 function Get-PhasePitStatus{
+[cmdletbinding()]
 Param (
     [parameter(ValueFromPipelineByPropertyName)]
     [string]$id
@@ -822,8 +900,8 @@ $uri = "$id"
 $data = (Invoke-RestMethod -Uri $uri -Method Get -WebSession $session).feed.entry.content.phasepit
 $status = ($data.phase.phaseProgressLabel)
 $state = ($data.state)
-Write-Host -ForegroundColor Yellow "Current state is : $state"
-Write-Host -ForegroundColor Yellow "Current status is : $status"
+Write-Verbose "Current state is : $state"
+Write-Verbose "Current status is : $status"
 
 $data
 
@@ -858,6 +936,9 @@ function New-AppSyncSecureCreds([string] $path)
 
 }
 function Re-Auth(){
+
+    [cmdletbinding()]
+
     $server = $Global:server
     $secpassword = $Global:secpassword
     $username = $Global:username
