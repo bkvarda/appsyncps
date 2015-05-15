@@ -59,18 +59,19 @@ You can query a source DB, grab the ID, create a 1st gen copy, create a 2nd gen 
 ```
 Get-AppSyncSQLDatabases | Where Name -eq "POC" | New-AppSyncGen1DBCopy | New-AppSyncGen2DBCopy | Mount-AppSyncCopy -mounthost "Host1" -mountpath "Default Path" -accesstype "readonly"
 ```
-You can refresh a DB copy like this:
-```
-Get-AppSyncSQLDatabaseCopies | Where Name -eq "POC01" | Refresh-AppSyncDatabaseCopy
-```
 You can unmount all mounted Gen 2 DB copies like this:
 ```
 Get-AppSyncSQLDatabaseCopies | Where Generation -eq "2" -and Mount_Status -eq "Mounted" | Unmount-AppSyncCopy 
 ```
-You can orderly refresh all Gen 1 and Gen 2 databases associated with a gold/primary DB (takes care of unmounts and remounts as well):
+You can create a series of gen2 copies and mount them to specified hosts/paths like this (use the hostlist.csv in this repo as a template):
 ```
-Get-AppSyncSQLDatabases | Where Name -eq "POC" | Refresh-AllAppSyncDatabaseCopies 
+Get-AppSyncSQLDatabases | Where Name -eq "POC" | New-AppSyncMassGen2 -list C:\code\appsyncps\hostlist.csv 
 ```
+You can clean up all copies of specified database (unmount and expire) like this:
+```
+Get-AppSyncSQLDatabases | Where Name -eq "POC" | Remove-AllCopies
+```
+You can see all the calls by adding the -Verbose flag to everything
 
 More to come...maybe
 

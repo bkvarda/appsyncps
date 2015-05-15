@@ -464,212 +464,8 @@ $phaseid = (Invoke-RestMethod -Uri $uri -Method Post -Body $body -ContentType "a
  $status.status
 }
 
-#takes 1st or 2nd Generation ID
-function Refresh-AppSyncDatabaseCopy{
-
-[cmdletbinding()]
-
-Param (
-    [parameter(ValueFromPipelineByPropertyName)]
-    [string]$id
 
 
-)
-$baseuri = $Global:baseuri
-$session = $Global:cookie
-
-$initialcopies = (Get-AppSyncSQLDatabaseCopies -id $id | Sort-Object -Property Last_Modified -Descending)
-
-$uri = "$baseuri/instances/sqlServerDatabase::$id/relationships/replicationPhasepit?GUI=true"
-
-#gets the replication phase pit ID
-$phasepitid = (Invoke-RestMethod -Uri $uri -Method Get -WebSession $session).feed.entry.content.phasepit.id
-
-
-$uri = "$baseuri/instances/phasepit::$phasepitid/action/refresh"
-
-$phaseid = (Invoke-RestMethod -Uri $uri -Method Post -WebSession $session).feed.entry
-
-    Write-Host "Refresh of copy initiated..."
-  $limit = New-TimeSpan -Minutes 10
-  $timer = [diagnostics.stopwatch]::StartNew()
-
-   while($timer.Elapsed -lt $limit){
-  $status=($phaseid | Get-PhaseStatus)
-  if($status.overallState -eq "Complete"){
-      Write-Host -ForeGroundColor Green "Process complete with status:"$status.overallStatus
-      Re-Auth
-      break
-  }
-  Start-Sleep -Seconds 10
-
- }
-
- return $status.overallStatus
-
-}
-#Refresh all children of a primary database ID (first and second gens). We do this synchronously due to limited relationship between old copy and new
-function Refresh-AllAppSyncDatabaseCopies{
-
-[cmdletbinding()]
-
-Param(
-    [parameter(ValueFromPipelineByPropertyName)]
-    [string]$id
-)
-
-$baseuri = $Global:baseuri
-$session = $Global:cookie
-
-$copydata = (Get-AppSyncSQLDatabaseCopies -dbid $id)
-$g1failures = @()
-
-###first do all gen 1s
-$g1data = $copydata | Where Generation -eq "1" | Select-Object
-$g2data = $copydata | Where Generation -eq "2" | Select-Object
-    $g1data | ForEach-Object{
-        
-        #These start at Success and track step completion to determine whether next steps should occur
-        $unmountstatus = "Success"
-        $refreshstatus = "Successful"
-        
-        Write-Host "Working on "$_.Name" with ID "$_.ID
-        #If it is mounted, get data about what is mounted and then unmount 
-        if($_.Mount_Status -eq "Mounted"){
-        
-        #Get info about the mount
-        $mountdata = Get-AppSyncMountInfo -dbid $_.ID
-        $mountpath = $mountdata["actualMountPath"]
-        $mounthost = $mountdata["mounthost"]
-        $accesstype = $mountdata["accesstype"]
-        $copymetadatapath = $mountdata["actualMetadataPath"]
-
-        Write-Host $_.ID " is mounted on "$mounthost " at mount point "$mountpath " with access type of "$accesstype
-
-        Re-Auth
-
-        #Unmount it
-        Write-Host "Unmounting "$_.Name" with ID "$_.ID
-        $unmountstatus = (Unmount-AppSyncCopy -dbid $_.ID)
-        Write-Host $unmountstatus
-        }
-        #Refresh it. This can take multiple attempts for various reasons, it's cleaner if we try many times for success on G1
-        if($unmountstatus -eq "Success"){
-        $attempt = 0
-        $newid = $_.ID
-          while($attempt -lt 5){
-             Write-Host "Refreshing "$_.Name" with ID "$newid
-             $refreshstatus = (Refresh-AppSyncDatabaseCopy -id $newid)
-             Re-Auth
-
-               if($refreshstatus -ne "Successful"){
-                 $currentcopies = (Get-AppSyncSQLDatabaseCopies -id $id | Sort-Object -Property Last_Modified -Descending)
-                 $newid = ($currentcopies | Select -First 1 | Select ID).ID
-                 $attempt ++
-                 Start-Sleep -Seconds 15
-               }
-               else{
-                 
-                 break
-
-               }
-             }
-       
-        }
-
-
-        #Mount it back to its original host if it was mounted before
-        if($_.Mount_Status -eq "Mounted" -and $unmountstatus -eq "Success" -and $refreshstatus -eq "Successful"){
-        
-        #get our copy data to find the new ID which will be the most rescent
-        $copydataordered = ((Get-AppSyncSQLDatabaseCopies -dbid $id) | Sort-Object -Property Last_Modified -Descending)
-        $latestid = ($copydataordered | Select -first 1).id
-        Mount-AppsyncCopy -mounthost $mounthost -mountpath $mountpath -accesstype $accesstype -dbid $latestid
-        }
-
-        #if there was a failed refresh, track the ID so we don't try to refresh it's g2 children
-        if($refreshstatus -ne "Successful"){
-         $g1failures += $_.ID
-
-        }
-
-        #reset tracking variables for next one
-        $unmountstatus = "Success"
-        $refreshstatus = "Successful"
-
-     }
-    ###then do all gen 2s
-     $g2data | ForEach-Object{
-        
-        $parentsuccess = $true
-        #check to see if parent g1 failed, if so, don't attempt any of these steps
-        foreach($failure in $g1failures){
-           
-           if($_.Parent_ID -eq $failure){
-
-              $parentsuccess = $false
-           }
-        }
-        
-        
-        $unmountstatus = "Success"
-        $refreshstatus = "Successful"
-        Write-Host "Working on "$_.Name" with ID "$_.ID
-        if(!$parentsuccess){Write-Host "Parent failed refresh, skipping g2 refresh"}
-        #If it is mounted, get data about what is mounted and then unmount 
-        if($_.Mount_Status -eq "Mounted" -and $parentsuccess){
-        
-        #Get info about the mount
-        $mountdata = Get-AppSyncMountInfo -dbid $_.ID
-        $mountpath = $mountdata["actualMountPath"]
-        $mounthost = $mountdata["mounthost"]
-        $accesstype = $mountdata["accesstype"]
-        $copymetadatapath = $mountdata["actualMetadataPath"]
-
-        #Unmount it
-        Write-Host "Unmounting "$_.Name" with ID "$_.ID
-        $unmountstatus = (Unmount-AppSyncCopy -dbid $_.ID)
-        Write-Host $unmountstatus
-        }
-        Start-Sleep -Seconds 10
-        #Refresh it
-        if($unmountstatus -eq "Success" -and $parentsuccess){
-        $attempt = 0
-        $newid = $_.ID
-          while($attempt -lt 1){
-             Write-Host "Refreshing "$_.Name" with ID "$newid
-             $refreshstatus = (Refresh-AppSyncDatabaseCopy -id $newid)
-             Re-Auth
-
-               if($refreshstatus -ne "Successful"){
-                 $currentcopies = (Get-AppSyncSQLDatabaseCopies -id $id | Sort-Object -Property Last_Modified -Descending)
-                 $newid = ($currentcopies | Select -First 1 | Select ID).ID
-                 $attempt ++
-                 Start-Sleep -Seconds 20
-
-               }
-               else{
-                 
-                 break
-
-               }
-             }
-        }
-        #Mount it back to its original host if it was mounted before
-        if($_.Mount_Status -eq "Mounted" -and $unmountstatus -eq "Success" -and $refreshstatus -eq "Successful" -and $parentsuccess){
-        
-        #get our copy data to find the new ID which will be the most rescent
-        $copydataordered = ((Get-AppSyncSQLDatabaseCopies -dbid $id) | Sort-Object -Property Last_Modified -Descending)
-        $latestid = ($copydataordered | Select -first 1).id
-        Mount-AppsyncCopy -mounthost $mounthost -mountpath $mountpath -accesstype $accesstype -dbid $latestid
-        }
-
-        #reset tracking variables
-         $unmountstatus = "Success"
-         $refreshstatus = "Successful"
-     }
-
-}
 
 function Expire-AppSyncSQLDatabaseCopy{
 
@@ -695,8 +491,110 @@ $data
 
 }
 
+#Creates a G1 and X number of G2s depending on hostlist and mounts to specified location 
+function New-AppSyncMassGen2{
+
+[cmdletbinding()]
+
+Param(
+    [parameter(Mandatory=$true, ValueFromPipelineByPropertyName)]
+    [string]$id,
+    [parameter(Mandatory=$true)]
+    [string]$list
+)
+
+$summary = @()
+$baseuri = $Global:baseuri
+$session = $Global:cookie
+
+$hostlist = Import-CSV $list 
+
+#Create a G1 copy 
+$g1 = (New-AppSyncGen1DBCopy -id $id)
+
+#If the G1 succeeded, asynchronously make X # of G2s based on the host list
+if($g1.dbid){
+
+  #Make a bunch of G2s
+  Foreach ($server in $hostlist){
+   $result =  New-Object PSObject
+   $result | Add-Member NoteProperty -Name Host -Value $server.Hostname
+   $result | Add-Member NoteProperty -Name Mount_Path -Value $server.Mount_Path
+   $result | Add-Member NoteProperty -Name Access_Type -Value $server.Access_Type
+
+   $g2 = (New-AppSyncGen2DBCopy -dbid $g1.dbid -spid $g1.spid)
+      #if the creation succeeded
+      if($g2.dbid){
+        $result | Add-Member NoteProperty -Name Last_Snap -Value "Success"
+        Start-Sleep -Seconds 10
+
+        $mountstatus = (Mount-AppsyncCopy -dbid $g2.dbid -spid $g2.spid -mounthost $server.Hostname -mountpath $server.Mount_Path -accesstype $server.Access_Type)
+        $result | Add-Member NoteProperty -Name Last_Mount -Value $mountstatus
+
+      }
+      else{
+
+        $result | Add-Member NoteProperty -Name Last_Snap -Value "Failed"
+
+      }
+    $summary += $result
+
+  }
+
+  return $summary
+
+ }
+}
 
 
+#Cleans up all existing copies for a given DB
+function Remove-AllCopies{
+
+[cmdletbinding()]
+
+Param(
+    [parameter(ValueFromPipelineByPropertyName)]
+    [string]$id
+)
+
+$baseuri = $Global:baseuri
+$session = $Global:cookie
+
+$copydata = (Get-AppSyncSQLDatabaseCopies -dbid $id)
+
+$g1data = $copydata | Where Generation -eq "1" | Select-Object
+$g2data = $copydata | Where Generation -eq "2" | Select-Object
+
+    foreach ($g2 in $g2data){
+        $unmountstatus = "Success"
+
+        if($g2.Mount_Status -eq "Mounted"){
+        $unmountstatus = Unmount-AppSyncCopy -dbid $g2.ID
+        }
+         if($unmountstatus -eq "Success"){
+            Expire-AppSyncSQLDatabaseCopy -id $g2.ID
+         }
+     Re-Auth
+    }
+
+    foreach($g1 in $g1data){
+        $unmountstatus = "Success"
+
+        if($g1.Mount_Status -eq "Mounted"){
+        $unmountstatus = Unmount-AppSyncCopy -dbid $g1.ID
+        }
+        if($unmountstatus -eq "Success"){
+            Expire-AppSyncSQLDatabaseCopy -id $g1.ID
+         }
+      Re-Auth
+    }
+
+    Write-Host "Done"
+
+
+
+
+}
 
 function Get-RepurposeServicePlans{
 

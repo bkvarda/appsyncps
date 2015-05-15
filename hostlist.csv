@@ -1,0 +1,5 @@
+Hostname,Mount_Path,Metadata_Path,Access_Type,Last_Mount,Last_Snap,Snap_ID
+msappsyncsrc,Default Path,Default Path,readonly,Success,Success,x
+msappsynctgt,Default Path,Default Path,readonly,Success,Success,x
+msappsyncsrc,C:\temp\%%ProdServerName%%\,Default Path,readonly,,,
+msappsynctgt,C:\temp\test123\,Default Path,readonly,,,
