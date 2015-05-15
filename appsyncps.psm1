@@ -709,10 +709,15 @@ function Get-AppSyncSQLDatabases{
     $data | ForEach-Object {
          $result =  New-Object PSObject
 
+         $currentid = $_.id
+         $uri = "$baseuri/instances/sqlServerDatabase::$currentid/relationships/sqlServerInstance"
+         $instance = (Invoke-RestMethod -Method Get -Uri $uri -WebSession $session).feed.entry.content.sqlServerInstance.name
+          
          $result | Add-Member NoteProperty -Name Name -Value $_.name
          $result | Add-Member NoteProperty -Name Last_Modified -Value $_.lastModifiedFormatted
          $result | Add-Member NoteProperty -Name ID -Value $_.id
          $result | Add-Member NoteProperty –Name DB_Status –Value $_.databaseStatus
+         $result | Add-Member NoteProperty -Name Instance_Name -Value $instance
 
          $output += $result
 
