@@ -75,6 +75,10 @@ You can see all the calls by adding the -Verbose flag to everything
 
 More to come...maybe
 
+##Support
+Please file bugs and issues at the Github issues page. For more general discussions you can contact the EMC Code team at <https://groups.google.com/forum/#!forum/emccode-users>. The code and 
+documentation are released with no warranties or SLAs and are intended to be supported through a community driven process.  
+
 ##Licensing
 The MIT License (MIT)
 
