@@ -112,6 +112,21 @@ function Get-ServicePlans(){
 #Gets a Service Plan
 function Get-ServicePlan{
 
+ <#
+     .DESCRIPTION
+      Gets information about a service plan 
+      
+      .PARAMETER $id
+      ID of service plan, can be passed from pipeline (looks like 89c8ee2a-835d-4c68-bd4f-e36f60440d9a
+      .PARAMETER $spid
+      ID of service plan
+      .EXAMPLE
+      Get-ServicePlan -spid 89c8ee2a-835d-4c68-bd4f-e36f60440d9a
+      .EXAMPLE
+      Get-ServicePlans | Where title -eq "serviceplan sql bronze"| Get-ServicePlan
+  #>
+
+
 [cmdletbinding()]
 Param (
     [parameter(ValueFromPipelineByPropertyName)]
@@ -135,16 +150,8 @@ Param (
 
 #Runs Service Plans, can take full Service Plan id from pipeline or specified uuid <$spid>
 function Run-ServicePlan {
-  Param (
-    [parameter(ValueFromPipelineByPropertyName)]
-    [string]$id,
-
-    [parameter()]
-    [string]$spid
-
-  )
-
-    <#
+ 
+ <#
      .DESCRIPTION
       Runs a Service plan. Can pipe full URI id from Get-ServicePlans or used the unique identifier spid 
       
@@ -157,19 +164,29 @@ function Run-ServicePlan {
       .EXAMPLE
       Get-ServicePlans | Where title -eq "serviceplan sql bronze"| Run-ServicePlan
   #>
+ [cmdletbinding()]
+  Param (
+    [parameter(ValueFromPipelineByPropertyName)]
+    [string]$id,
+
+    [parameter()]
+    [string]$spid
+
+  )  
+    $session = $Global:cookie
+    $baseuri = $Global:baseuri
+    
+      if($id){
+      $uri = "$id/action/run"
+      }
+      else{
+      $uri = "$baseuri/instances/servicePlan::$spid/action/run"
+      }
+      $data = Invoke-RestMethod -Uri $uri -Method Post -WebSession $session
   
-  $session = $Global:cookie
-  $baseuri = $Global:baseuri
-  if($id){
-  $uri = "$id/action/run"
+      return $data.feed.entry
+    
   }
-  else{
-  $uri = "$baseuri/instances/servicePlan::$spid/action/run"
-  }
-  $data = Invoke-RestMethod -Uri $uri -Method Post -WebSession $session
-  
-  return $data.feed.entry
-}
 
 #########################
 #Run Repurpose Workflows#
@@ -178,6 +195,20 @@ function Run-ServicePlan {
 
 # id = unique identifier of DB
 function New-AppSyncGen1DBCopy{
+
+<#
+     .DESCRIPTION
+      Creates a new Generation 1 Database Copy of a database. Returns service plan ID and new G1 dbid
+      
+      .PARAMETER $id
+      ID of database to copy, can be passed from pipeline (looks like 89c8ee2a-835d-4c68-bd4f-e36f60440d9a
+      .PARAMETER $dbid
+      Alias of $id
+      .EXAMPLE
+      New-AppSyncGen1DBCopy -id 89c8ee2a-835d-4c68-bd4f-e36f60440d9a
+      .EXAMPLE
+      Get-AppSyncSQLDatabaseCopies | Where name -eq "test"| New-AppSyncGen1DBCopy
+  #>
   [cmdletbinding()]
   Param (
     [parameter(ValueFromPipelineByPropertyName)]
@@ -191,83 +222,98 @@ function New-AppSyncGen1DBCopy{
   $session = $Global:cookie
   $baseuri = $Global:baseuri
   $result =  New-Object PSObject
-
-  $db = (Invoke-RestMethod -Uri "$baseuri/instances/sqlServerDatabase::$dbid" -Method Get -WebSession $session).feed.entry.content.sqlServerDatabase
   
-  $dbinstance = (Invoke-RestMethod -Uri "$baseuri/instances/sqlServerDatabase::$dbid/relationships/sqlServerInstance" -Method Get -WebSession $session).feed.entry.content.sqlServerInstance
+      $db = (Invoke-RestMethod -Uri "$baseuri/instances/sqlServerDatabase::$dbid" -Method Get -WebSession $session).feed.entry.content.sqlServerDatabase 
   
-  $instanceid = $dbinstance.id
+      $dbinstance = (Invoke-RestMethod -Uri "$baseuri/instances/sqlServerDatabase::$dbid/relationships/sqlServerInstance" -Method Get -WebSession $session).feed.entry.content.sqlServerInstance
+  
+      $instanceid = $dbinstance.id
  
-  $dbhost = (Invoke-RestMethod -Uri "$baseuri/instances/sqlServerInstance::$instanceid/relationships/host" -Method Get -WebSession $session).feed.entry.content.host
+      $dbhost = (Invoke-RestMethod -Uri "$baseuri/instances/sqlServerInstance::$instanceid/relationships/host" -Method Get -WebSession $session).feed.entry.content.host
   
   
-  #change content of template to new name of Gen1
-  $time = Get-Date -UFormat "%Y %M %D %H %S %p"
-  $g1xml = [xml](Get-Content "$PSScriptRoot\g1.xml")
-  $g1xml.servicePlan.name.'#text' = $db.name+" $time "+"1.1" 
-  $g1xml.servicePlan.displayName.'#text' = $db.name+" $time "+"1.1"
+      #change content of template to new name of Gen1
+      $time = Get-Date -UFormat "%Y %M %D %H %S %p"
+      $g1xml = [xml](Get-Content "$PSScriptRoot\g1.xml")
+      $g1xml.servicePlan.name.'#text' = $db.name+" $time "+"1.1" 
+      $g1xml.servicePlan.displayName.'#text' = $db.name+" $time "+"1.1"
 
 
   
-  #generate XML payloud for new service plan
-  $body = ($g1xml.OuterXml)
+      #generate XML payloud for new service plan
+      $body = ($g1xml.OuterXml)
   
-  $uri = "$baseuri/types/servicePlan/instances"
+      $uri = "$baseuri/types/servicePlan/instances"
   
-  #create the new 'service plan' for the g1
-  $data = (Invoke-RestMethod -Uri $uri -Method Post -Body $body -ContentType "application/xml" -WebSession $session)
+      #create the new 'service plan' for the g1
+      $data = (Invoke-RestMethod -Uri $uri -Method Post -Body $body -ContentType "application/xml" -WebSession $session)
 
-  
-
-  #new service plan data
-  $sp = $data.feed.entry
-  $spid = $sp.content.servicePlan.id
-
-  #change content of dataset template
-  $dsxml = [xml](Get-Content "$PSScriptRoot\dataset.xml") 
-  $dsxml.dataset.options.option[0].value = ($dbhost.name).toString()
-  $dsxml.dataset.options.option[1].value = ($dbinstance.name).toString()
-  $dsxml.dataset.options.option[2].value = ($db.name).toString()
-
-  #generate XML payload for new dataset tied to new service plan
-  $body = ($dsxml.OuterXml)
-
-
-  $dsuri = "$baseuri/types/dataset/instances?servicePlan=$spid"
-
-  #create the new dataset tied to new service plan
-  $ds = (Invoke-RestMethod -Uri $dsuri -Method Post -Body $body -ContentType "application/xml" -WebSession $session)
   
 
+      #new service plan data
+      $sp = $data.feed.entry
+      $spid = $sp.content.servicePlan.id
 
-  #run the service plan 
-  $process = ($sp |Run-ServicePlan)
+      #change content of dataset template
+      $dsxml = [xml](Get-Content "$PSScriptRoot\dataset.xml") 
+      $dsxml.dataset.options.option[0].value = ($dbhost.name).toString()
+      $dsxml.dataset.options.option[1].value = ($dbinstance.name).toString()
+      $dsxml.dataset.options.option[2].value = ($db.name).toString()
+
+      #generate XML payload for new dataset tied to new service plan
+      $body = ($dsxml.OuterXml)
+
+
+      $dsuri = "$baseuri/types/dataset/instances?servicePlan=$spid"
+
+      #create the new dataset tied to new service plan
+      $ds = (Invoke-RestMethod -Uri $dsuri -Method Post -Body $body -ContentType "application/xml" -WebSession $session)
   
-  Write-Host "Gen1 Copy Initiated..."
-  $limit = New-TimeSpan -Minutes 2
-  $timer = [diagnostics.stopwatch]::StartNew()
 
-  while($timer.Elapsed -lt $limit){
-  $status=($process | Get-PhaseStatus)
-  if($status.overallState -eq "Complete"){
-      Write-Host "Process complete with status:"$status.overallStatus
-      Re-Auth
-      break
+
+      #run the service plan 
+      $process = ($sp |Run-ServicePlan)
+  
+      Write-Host "Gen1 Copy Initiated..."
+      $limit = New-TimeSpan -Minutes 2
+      $timer = [diagnostics.stopwatch]::StartNew()
+
+      while($timer.Elapsed -lt $limit){
+      $status=($process | Get-PhaseStatus)
+      if($status.overallState -eq "Complete"){
+          Write-Host "Process complete with status:"$status.overallStatus
+          Re-Auth
+          break
+      }
+      Start-Sleep -Seconds 5
+
+     }
+      $copyuri = "$baseuri/instances/servicePlan::$spid/relationships/copies"
+      $data =  (Invoke-RestMethod -Uri $copyuri -Method Get -WebSession $session).feed.entry.content.sqlServerDatabase
+      $copyid = $data.id
+      $result | Add-Member NoteProperty –Name dbid –Value $copyid
+      $result | Add-Member NoteProperty –Name spid –Value $spid
+      return $result
+    
+  
+ 
   }
-  Start-Sleep -Seconds 5
-
- }
-  $copyuri = "$baseuri/instances/servicePlan::$spid/relationships/copies"
-  $data =  (Invoke-RestMethod -Uri $copyuri -Method Get -WebSession $session).feed.entry.content.sqlServerDatabase
-  $copyid = $data.id
-  $result | Add-Member NoteProperty –Name dbid –Value $copyid
-  $result | Add-Member NoteProperty –Name spid –Value $spid
-  return $result
-
- 
-}
 
 function New-AppSyncGen2DBCopy{
+
+<#
+     .DESCRIPTION
+      Creates a new Generation 2 Database Copy of a G1 database.
+      
+      .PARAMETER $dbid
+      ID of G1 database to copy, can be passed from pipeline (looks like 89c8ee2a-835d-4c68-bd4f-e36f60440d9a
+      .PARAMETER $spid
+      Service Plan ID of G1 copy
+      .EXAMPLE
+      New-AppSyncGen2DBCopy -dbid 89c8ee2a-835d-4c68-bd4f-e36f60440d9a -spid 849eea-835d-4c68-bd4f-e3ee643240d9a
+      .EXAMPLE
+      Get-AppSyncSQLDatabaseCopies | Where name -eq "test"| New-AppSyncGen1DBCopy | New-AppSyncGen2DBCopy
+  #>
 
 [cmdletbinding()]
 
@@ -358,14 +404,29 @@ Param (
 }
 
 function Mount-AppsyncCopy{
+<#
+     .DESCRIPTION
+      Mounts gen1 or gen2 copies to an AppSync host.
+      
+      .PARAMETER $dbid
+      ID of copy to mount (looks like 89c8ee2a-835d-4c68-bd4f-e36f60440d9a)
+      .PARAMETER $mounthost
+      Host copy should be mounted to
+      .PARAMETER $mountpath
+      Path to be mounted to
+      .PARAMETER
+      Accesstype of copy (eg readonly)
+      .EXAMPLE
+      Mount-AppsyncCopy -dbid 89c8ee2a-835d-4c68-bd4f-e36f60440d9a -mounthost Host123 -mountpath "default path" -accesstype readonly
+      .EXAMPLE
+      Get-AppSyncSQLDatabaseCopies | Where name -eq "test"| New-AppSyncGen1DBCopy | New-AppSyncGen2DBCopy | Mount-AppSyncCopy -mounthost Host123 -mountpath "C:\data" -accesstype readonly
+  #>
 
 [cmdletbinding()]
 
 Param (
     [parameter(ValueFromPipelineByPropertyName)]
     [string]$dbid,
-    [parameter(ValueFromPipelineByPropertyName)]
-    [string]$spid,
     [string]$mounthost,
     [string]$mountpath,
     [string]$accesstype
@@ -419,6 +480,18 @@ Param (
 #need a DBID/ID of DB copy
 function Unmount-AppSyncCopy{
 
+<#
+     .DESCRIPTION
+      Unmounts Mounts gen1 or gen2 copies to an AppSync host.
+      
+      .PARAMETER $dbid
+      ID of copy to unmount (looks like 89c8ee2a-835d-4c68-bd4f-e36f60440d9a)
+      .EXAMPLE
+      Unmount-AppsyncCopy -dbid 89c8ee2a-835d-4c68-bd4f-e36f60440d9a
+      .EXAMPLE
+      Get-AppSyncSQLDatabaseCopies | Where mount_status -eq "mounted"| Unmount-AppSyncCopy
+  #>
+
 [cmdletbinding()]
 
 Param(
@@ -469,6 +542,18 @@ $phaseid = (Invoke-RestMethod -Uri $uri -Method Post -Body $body -ContentType "a
 
 function Expire-AppSyncSQLDatabaseCopy{
 
+<#
+     .DESCRIPTION
+      Expires an AppSync Copy
+      
+      .PARAMETER $id
+      ID of copy to expire, can be passed from pipeline (looks like 89c8ee2a-835d-4c68-bd4f-e36f60440d9a)
+      .EXAMPLE
+      Expire-AppsyncSQLDatabaseCopy -id 89c8ee2a-835d-4c68-bd4f-e36f60440d9a
+      .EXAMPLE
+      Get-AppSyncSQLDatabaseCopies | Where Name -eq "test123"| Expire-AppSyncSQLDatabaseCopy
+  #>
+
 [cmdletbinding()]
 
 Param (
@@ -493,6 +578,20 @@ $data
 
 #Creates a G1 and X number of G2s depending on hostlist and mounts to specified location 
 function New-AppSyncMassGen2{
+
+<#
+     .DESCRIPTION
+      Takes a G1 copy of a primary database and then X number of G2 copies which will be mounted to hosts defined in a list CSV
+      
+      .PARAMETER $id
+      ID of primary database whose you want to take and mount many G2s from, can be passed from pipeline (looks like 89c8ee2a-835d-4c68-bd4f-e36f60440d9a)
+      .PARAMETER $list
+      CSV list containing host names and mount locations for G2 copies. See Github repo for example CSV
+      .EXAMPLE
+      New-AppSyncMassGen2 -id 89c8ee2a-835d-4c68-bd4f-e36f60440d9a -list "C:\temp\list.csv"
+      .EXAMPLE
+      Get-AppSyncSQLDatabases | Where Name -eq "test123"| New-AppSyncMassGen2 -list "C:\temp\list.csv"
+  #>
 
 [cmdletbinding()]
 
@@ -549,6 +648,18 @@ if($g1.dbid){
 
 #Cleans up all existing copies for a given DB
 function Remove-AllCopies{
+
+<#
+     .DESCRIPTION
+      Unmounts and expires all G1 and G2 copies of a database
+      
+      .PARAMETER $id
+      ID of primary database whose copies you want expired, can be passed from pipeline (looks like 89c8ee2a-835d-4c68-bd4f-e36f60440d9a)
+      .EXAMPLE
+      Remove-AllCopies -id 89c8ee2a-835d-4c68-bd4f-e36f60440d9a
+      .EXAMPLE
+      Get-AppSyncSQLDatabases | Where Name -eq "test123"| Remove-AllCopies
+  #>
 
 [cmdletbinding()]
 
@@ -647,6 +758,20 @@ $hash
 #Given root database ID, returns all copies 
 function Get-AppSyncSQLDatabaseCopies{
 
+<#
+     .DESCRIPTION
+      Returns list of all copies of a given primary database
+      
+      .PARAMETER $id
+      ID of primary database can be passed from pipeline (looks like 89c8ee2a-835d-4c68-bd4f-e36f60440d9a)
+      .PARAMETER $dbid
+      Alias of $id
+      .EXAMPLE
+      Get-AppSyncSQLDatabaseCopies -id 89c8ee2a-835d-4c68-bd4f-e36f60440d9a
+      .EXAMPLE
+      Get-AppSyncSQLDatabases | Where Name -eq "test123" | Get-AppSyncSQLDatabaseCopies
+  #>
+
 [cmdletbinding()]
 
 Param (
@@ -693,6 +818,13 @@ $data = (Invoke-RestMethod -Uri $uri -Method Get -WebSession $session).feed.entr
 ##SQL Related Commands#####
 ###########################
 function Get-AppSyncSQLDatabases{
+
+<#
+     .DESCRIPTION
+      Returns list of all primary databases and their associated instances
+      .EXAMPLE
+      Get-AppSyncSQLDatabases
+  #>
  
  [cmdletbinding()]
 
@@ -729,6 +861,13 @@ function Get-AppSyncSQLDatabases{
 }
 
 function Get-AppSyncSQLInstances{
+
+<#
+     .DESCRIPTION
+      Returns list of all SQL Instances
+      .EXAMPLE
+      Get-AppSyncSQLInstances
+  #>
  
  [cmdletbinding()]
 
@@ -746,6 +885,13 @@ function Get-AppSyncSQLInstances{
 }
 
 function Get-AppSyncHosts{
+
+<#
+     .DESCRIPTION
+      Returns list of all hosts
+      .EXAMPLE
+      Get-AppSyncHosts
+  #>
  
  [cmdletbinding()]
 
@@ -866,4 +1012,6 @@ function Re-Auth(){
     $Global:cookie = $session
 
 }
+
+
 
